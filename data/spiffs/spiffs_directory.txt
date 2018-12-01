@@ -1,0 +1,2 @@
+# On PlataformIO the SPIFFs file land on /spiffs directory
+more info: https://fasani.de/2018/11/24/platformio-an-alternative-to-arduino-ide-and-a-complete-ecosystem-for-iot/#spiffs

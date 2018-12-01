@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<head>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://gitcdn.github.io/bootstrap-toggle/2.2.2/css/bootstrap-toggle.min.css">
+
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="https://gitcdn.github.io/bootstrap-toggle/2.2.2/js/bootstrap-toggle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap.native/2.0.24/bootstrap-native-v4.min.js"></script>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+    <meta charset="UTF-8">
+    <style>
+        .inline-headers h4, .inline-headers h6 {
+            display: inline-block;
+            vertical-align: baseline;
+        }
+        .nodec a {
+            text-decoration: none;
+        }
+        .nodec a:hover {
+            color: #000;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class='container-fluid'>
+    <div class='row'>
+        <!-- TODO: Handle replacement tags like {{localDomain}} -->
+        <div class="col-md-6">
+            <h4 class="inline-headers">cam.local</h4>
+        </div>
+        <div class="col-md-6 text-right">
+            <h6 class="inline-headers"><a href="/fs/list">File Manager</a></h6>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-md-12 text-right'>
+            <input id='stream' data-on='Stream ON' data-off='Disabled' type='checkbox'>
+            <input id='timelapse' data-on='Timelapse ON' data-off='Disabled' type='checkbox'>
+        </div>
+    </div>
+    <div class='row'>
+        <!-- Unhide this if you want effects on the OV2640: Remove .d-none class (Now is controlled by a javascript line loaded at the end) -->
+        <div class="col-md-6 col-xs-6 d-none" id="effects">
+            <div class="dropdown">
+                <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">Effects
+                    <span class="caret"></span></button>
+                <ul class="dropdown-menu nodec">
+                    <li><a href="/set?effect=7" target='frame'><span style="color:#EEE">&#11044;</span> No effect</a></li>
+                    <li><a href="/set?effect=4" target='frame'><span style="color:#CCC">&#11044;</span> Black&White</a></li>
+                    <li><a href="/set?effect=3" target='frame'><span style="color:#ef492e">&#11044;</span> Reddish</a></li>
+                    <li><a href="/set?effect=2" target='frame'><span style="color:#46e12e">&#11044;</span> Greenish</a></li>
+                    <li><a href="/set?effect=1" target='frame'><span style="color:#5184f8">&#11044;</span> Bluish</a></li>
+                    <li><a href="/set?effect=0" target='frame'><span style="color:#831600">&#11044;</span> Antique</a></li>
+                    <li><a href="/set?effect=5" target='frame'><span style="color:#F9F9F9">&#11044;</span> Color negative</a></li>
+                    <li><a href="/set?effect=6" target='frame'><span style="color:#000">&#11044;</span> BW negative</a></li>
+                    <li><a href="/set?effect=8" target='frame'><span style="color:#821300">&#11044;</span> Sepia</a></li>
+                    <li><a href="/set?effect=9"  target='frame'><span style="color:#b14200">&#11044;</span> Over exposure</a></li>
+                    <li><a href="/set?effect=10" target='frame'><span style="color:#FFFF00">&#11044;</span> Solarize</a></li>
+                </ul>
+            </div>
+        </div>
+        <!-- Unhide this if you want exposure on the OV5642: Remove .d-none class -->
+        <div class="col-md-6 col-xs-6 d-none" id="exposure">
+            <div class="dropdown">
+                <button class="btn btn-default dropdown-toggle" type="button" data-toggle="dropdown">Exposure
+                    <span class="caret"></span></button>
+                <ul class="dropdown-menu nodec">
+                    <li><a href="/set?exposure=0" target='frame'><span style="color:#101010">&#11044;</span>  -5</a></li>
+                    <li><a href="/set?exposure=1" target='frame'><span style="color:#202020">&#11044;</span>  -4</a></li>
+                    <li><a href="/set?exposure=2" target='frame'><span style="color:#404040">&#11044;</span>  -3</a></li>
+                    <li><a href="/set?exposure=3" target='frame'><span style="color:#505050">&#11044;</span>  -2</a></li>
+                    <li><a href="/set?exposure=4" target='frame'><span style="color:#585858">&#11044;</span>  -1</a></li>
+                    <li><a href="/set?exposure=5" target='frame'><span style="color:#707070">&#11044;</span>  Default</a></li>
+                    <li><a href="/set?exposure=6" target='frame'><span style="color:#888888">&#11044;</span>  +1</a></li>
+                    <li><a href="/set?exposure=7" target='frame'><span style="color:#A0A0A0">&#11044;</span>  +2</a></li>
+                    <li><a href="/set?exposure=8" target='frame'><span style="color:#A9A9A9">&#11044;</span>  +3</a></li>
+                    <li><a href="/set?exposure=9"  target='frame'><span style="color:#D0D0D0">&#11044;</span> +4</a></li>
+                    <li><a href="/set?exposure=10" target='frame'><span style="color:#F5F5F5">&#11044;</span> +5</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <!-- TODO: Handle replacement tags like {{localDomain}} -->
+        <div class='col-md-12'>
+            <form id='f1' action='/capture' target='frame' method='GET'>
+                <div class='row' style="margin-top:.5em;margin-bottom:.5em">
+                    <div class='col-md-12'>
+                        <input type='submit' value='PHOTO' class='btn btn-lg btn-dark form-control'>
+                    </div>
+                </div>
+            </form>
+
+            <iframe name='frame' width='100%' height='400' frameborder="0"></iframe>
+            <div class='row'>
+                <div class='col-md-6'>
+                    <button onclick="frame.location='/wifi/reset'"
+                            class="btn btn-sm btn-danger"
+                            title="Creates the CAM accesspoint so you can set up a new WiFi connection">Reset WiFi Credentials</button>
+                </div>
+                <div class='col-md-6 text-right'>
+                    <button onclick="frame.location='/camera/settings'"
+                            class="btn btn-sm btn-default form-control"
+                            title="This option does not change WiFi settings but let's you edit Camera setup">Restart to edit CAM config</button>
+                </div>
+            </div>
+            <div class='row'>
+                <div class='col-md-12 text-right'>
+                    <button onclick="frame.location='/deepsleep'"
+                            class="btn btn-sm btn-black"
+                            title="Sends the camera to deep sleep mode">Deep sleep mode</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+
+<script>
+    $(function () {
+        $('#stream').bootstrapToggle({
+            on: 'Stream ON', off: 'Stream OFF'
+        });
+        $('#stream').change(function() {
+            if ($(this).prop('checked')) {
+                frame.location = '/stream';
+            } else {
+                frame.location = '/stream/stop';
+            }
+        })
+    });
+    $(function () {
+        $('#timelapse').bootstrapToggle({
+            on: 'Timelapse ON', off: 'Timelapse OFF'
+        });
+        $('#timelapse').change(function() {
+            if ($(this).prop('checked')) {
+                frame.location = '/timelapse/start';
+            } else {
+                frame.location = '/timelapse/stop';
+            }
+        })
+    });
+</script>
+<!-- Note this JS is dynamically generated from ESP WebServer -->
+<script src="dynamicJavascript.js"></script>
