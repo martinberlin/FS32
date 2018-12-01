@@ -1,11 +1,9 @@
-// Extended from ArduCAM Mini demo (C)2017 Lee      (Espressif 8266 to Wemos made by Lee)
-// Project Website:  https://fasarek.de             ArduCAM Web:   http://www.ArduCAM.com
-//  ______ _____ ___                                https://github.com/martinberlin/FS2 
+//  ______ _____ ___                                https://github.com/martinberlin/FS32 
 // |  ____/ ____|__ \ 
 // | |__ | (___    ) |
 // |  __| \___ \  / / 
 // | |    ____) |/ /_ 
-// |_|   |_____/|____|     WiFi instant Camera ESP32 version
+// |_|   |_____/3____|     WiFi instant Camera ESP32 version
           
 // PINS     Please check in your board datasheet or comment the
 //          Serial.print after  setup()  to use the right GPIOs
@@ -13,14 +11,12 @@
 // CS   17  Camera CS. Check for conflicts with any other SPI (OLED, etc)
 // MOSI 23
 // MISO 19
-// SCK  18 -> May change depending on your board
+// SCK  18
 // SDA  21
 // SCL  22
 // SHU  00 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
 // LED  12 ledStatus
-// LED  13 ledStatusTimelapse
 // OLED Display /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16
-//#define OV5642_MINI_5MP_PLUS // It does not work like this set this in ArduCams memorysaver.h
 #include <Arduino.h>
 #include "FS.h"
 #include "SPIFFS.h"
@@ -35,47 +31,33 @@
 #include <OneButton.h>;
 #include <ArduinoJson.h>    // Any version > 5.13.3 gave me an error on swap function
 #include <WebServer.h>
-#include <U8g2lib.h>        // OLED display
+#include <U8g2lib.h>        // OLED display I2C Settings are for Heltec board, change it to suit yours:
 
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 
 // CAMERA CONFIGURATION
 // Goes together if cameraMosfetReady is enabled Arducam will turn on only to take the picture
-// In turn it should be connected to VEXT or to a Mosfet that on HIGH will cut the VCC to the camera
+// In turn it should be connected to a Mosfet that on HIGH will cut the VCC to the camera (Do not use VEXT, since it won't support the +150mA of the camera)
 const boolean cameraMosfetReady = false;       // cameraMosfetReady determines if 
 const byte gpioCameraVcc = 21;                 // GPIO21 -- Vext control on HIGH will turn camera off after taking picture (energy saving)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-//   cameraModelId                                Switch ArduCAM model to indicated ID. Ex.OV2640 = 5
-byte cameraModelId = 3;                        // OV2640:5 |  OV5642:3   5MP  !IMPORTANT Nothing runs if model is not matched
-bool saveInSpiffs = false;                      // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = true;                      // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
 char* localDomain        = "cam";              // mDNS: cam.local
-// Touch configuration
-byte gpioTouch = 15;         // T3
-byte touchInitialRead = 0;
-byte touchThreshold = 38;   // Will fire when Touch read is < touchInitialRead+touchThreshold see Touch.NOTE below
-boolean touchEnabled= false; // NOTE: touchEnabled will disable the phisical button readings
-#include "memorysaver.h"    // Uncomment the camera model you use
+
+#include "memorysaver.h"    // Uncomment the #define OV5642_MINI_5MP_PLUS
 // NOTE:     ArduCAM owners please also make sure to choose your camera module in the ../libraries/ArduCAM/memorysaver.h
-// ATTENTION NodeMCU: For NodeMCU 1.0 ESP-12E it only worked using Tools->CPU Frequency: 160 Mhz
-// Touch.NOTE: It happened that misteriously T0 died for touch and started returning only 0. No idea why, just change it to another Touch pin
 // INTERNAL GLOBALS
-boolean captureTimeLapse;
-static unsigned long lastTimeLapse;
-unsigned long timelapseMillis;
+
 // Flag for saving data in config.json
 bool shouldSaveConfig = false;
 
 // Outputs / Inputs (Shutter button)
 OneButton buttonShutter(4, true, false);
 const int ledStatus = 12;
-const int ledStatusTimelapse = 13;
-
-WiFiManager wm;
-WiFiClient client;
 
 // Makes a div id="m" containing response message to dissapear after 6 seconds
 String javascriptFadeMessage = "<script>setTimeout(function(){document.getElementById('m').innerHTML='';},6000);</script>";
@@ -89,15 +71,16 @@ static uint8_t buffer[bufferSize] = {0xFF};
 String start_request = "";
 String boundary = "_cam_";
 String end_request = "\n--"+boundary+"--\n";
- 
+
 uint8_t temp = 0, temp_last = 0;
 int i = 0;
 bool is_header = false;
 
+// Fixed to a OV5642
+ArduCAM myCAM(3, CS);
+WiFiManager wm;
+WiFiClient client;
 WebServer server(80);
-
-// Automatic switch between 2MP and 5MP models
-ArduCAM myCAM(cameraModelId, CS);
 
 // jpeg_size_id Setting to set the camara Width/Height resolution. Smallest is default if no string match is done by config
 uint8_t jpeg_size_id = 1;
@@ -121,9 +104,8 @@ struct config_t
 } memory;
 byte u8cursor = 1;
 byte u8newline = 5;
-
 String cameraSetting;
-byte   cameraSetValue;
+byte   cameraSetExposure;
 #include "FS2helperFunctions.h"; // Helper methods: printMessage + EPROM
 #include "serverFileManager.h";  // Responds to the FS Routes
 // ROUTING Definitions
@@ -131,8 +113,6 @@ void defineServerRouting() {
     server.on("/capture", HTTP_GET, serverCapture);
     server.on("/stream", HTTP_GET, serverStream);
     server.on("/stream/stop", HTTP_GET, serverStopStream);
-    server.on("/timelapse/start", HTTP_GET, serverStartTimelapse);
-    server.on("/timelapse/stop", HTTP_GET, serverStopTimelapse);
     server.on("/fs/list", HTTP_GET, serverListFiles);           // FS
     server.on("/fs/download", HTTP_GET, serverDownloadFile);    // FS
     server.on("/fs/delete", HTTP_GET, serverDeleteFile);        // FS
@@ -140,7 +120,6 @@ void defineServerRouting() {
     server.on("/camera/settings", HTTP_GET, serverCameraParams);
     server.on("/set", HTTP_GET, serverCameraSettings);
     server.on("/deepsleep", HTTP_GET, serverDeepSleep);
-    server.on("/dynamicJavascript.js", HTTP_GET, serverDynamicJs); // Renders a one-line javascript
     server.onNotFound(handleWebServerRoot);
     server.begin();
 }
@@ -239,47 +218,23 @@ void setup() {
   u8g2.setCursor(0, u8cursor);
   u8g2.setFont(u8g2_font_pcsenior_8r);
   u8g2.setDisplayRotation(U8G2_R2); // U8G2_R0 No rotation, landscape
-  String cameraModel; 
-  if (cameraModelId == 5) {
-    // Please select the hardware platform for your camera module in the ../libraries/ArduCAM/memorysaver.h file
-    cameraModel = "OV2640";
-    cameraSetting = "effect";
-    cameraSetValue = 7; // No effect
-  }
-  if (cameraModelId == 3) {
-    cameraModel = "OV5642";
-    cameraSetting = "exposure";
-    cameraSetValue = 5; // Default
-  }
+  cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
   Serial.begin(115200);
-  for(int i=0; i< 10; i++) {
-    touchInitialRead += touchRead(gpioTouch);
-  }
-  touchInitialRead = touchInitialRead / 10;
-  Serial.println("touchInitialRead: "+String(touchInitialRead));
   // Find out what are this PINS on ESP32 
   //Serial.print("MOSI:");Serial.println(MOSI);
   //Serial.print("MISO:");Serial.println(MISO);
   //Serial.print("SCK:");Serial.println(SCK);
   //Serial.print("SDA:");Serial.println(SDA);
 
-  // Define outputs. This are also ledStatus signals (Red: no WiFI, B: Timelapse, G: Arducam Chip select)
+  // Define outputs
   pinMode(CS, OUTPUT);
   pinMode(gpioCameraVcc, OUTPUT);
   pinMode(ledStatus, OUTPUT);
-  pinMode(ledStatusTimelapse, OUTPUT);
-  //pinMode(SCL, OUTPUT_OPEN_DRAIN | PULLUP);
-  //pinMode(SDA, OUTPUT_OPEN_DRAIN | PULLUP);
   digitalWrite(gpioCameraVcc, LOW); // Power camera ON
   // Read memory struct from EEPROM
   EEPROM_readAnything(0, memory);
-  printMessage(" ______ _____");
-  printMessage("|  ____/ ____|");
-  printMessage("| |__ | (___  ");
-  printMessage("|  __| \\___ \\");
-  printMessage("| |    ____) |");
-  printMessage("|_|   |_____/");
+  printMessage("FS32");
 
   // Read configuration from FS json
   if (SPIFFS.begin()) {
@@ -312,7 +267,7 @@ void setup() {
     printMessage("FFS Formatted?");
   }
   // WiFI Manager menu options
-  std::vector<const char *> menu = {"wifi", "sep", "param","sep", "info", "restart"};
+  std::vector<const char *> menu = {"wifi", "sep", "param","sep", "info", "ota"};
   // The extra parameters to be configured (can be either global or just in the setup)
   // After connecting, parameter.getValue() will get you the configured value
   // id/name placeholder/prompt default length
@@ -389,15 +344,9 @@ void setup() {
     configFile.close();
   }
 
-  // Convert timelapse(char) to timelapseInt and then to  milliseconds
-  int timelapseInt = atoi(timelapse);
-  timelapseMillis = (timelapseInt) * 1000;
-
   // Button events
-  if (!touchEnabled) {
-  buttonShutter.attachClick(shutterReleased); // Takes picture
-  buttonShutter.attachLongPressStop(shutterLongClick); // Starts timelapse
-  }
+  buttonShutter.attachClick(shutterReleased);
+  
   uint8_t vid, pid;
   uint8_t temp;
   // myCAM.write_reg uses Wire for I2C communication
@@ -413,65 +362,28 @@ void setup() {
   if (temp != 0x55) {
     printMessage("ERR SPI: Check");
     printMessage("ArduCam wiring");
-    printMessage("cam: "+cameraModel);
     delay(10000);
     serverDeepSleep();
   }
-// TODO Refactor this ugly casting to string just because c adds the 0 operator at end of chars
-  if (cameraModel == "OV2640") {
-    if (String(jpeg_size) == "640x480") {
-      jpeg_size_id = 4;
-      }
-    if (String(jpeg_size) == "800x600") {
-      jpeg_size_id = 5;
-      }
-    if (String(jpeg_size) == "1024x768") {
-      jpeg_size_id = 6;
-      }
-    if (String(jpeg_size) == "1280x1024") {
-      jpeg_size_id = 7;
-      }
-    if (String(jpeg_size) == "1600x1200") {
-      jpeg_size_id = 8;
-      }
 
-  // Check if the camera module type is OV2640
-  myCAM.wrSensorReg8_8(0xff, 0x01);
-  myCAM.rdSensorReg8_8(10, &vid);
-  myCAM.rdSensorReg8_8(11, &pid);
-
-  Serial.println("vid:"+String(vid));
-  Serial.println("pid:"+String(pid));
-  if ((vid != 0x26 ) && (( pid != 0x41 ) || ( pid != 0x42 ))) {
-    printMessage("ERR conn OV2640");
-  } else {
-    printMessage("CAMERA READY", true, true);
-    printMessage(IpAddress2String(WiFi.localIP()));
-    myCAM.set_format(JPEG);
-    myCAM.InitCAM();
-    myCAM.OV2640_set_JPEG_size(jpeg_size_id); 
+  if (String(jpeg_size) == "640x480") {
+   jpeg_size_id = 1;
   }
-}
-
-  if (cameraModel == "OV5642") {
-    if (String(jpeg_size) == "640x480") {
-      jpeg_size_id = 1;
-    }
-    if (String(jpeg_size) == "1024x768") {
-      jpeg_size_id = 2;
-    }
-    if (String(jpeg_size) == "1280x1024") {
-      jpeg_size_id = 3;
-    }
-    if (String(jpeg_size) == "1600x1200") {
-      jpeg_size_id = 4;
-    } 
-    if (String(jpeg_size) == "2048x1536") {
-      jpeg_size_id = 5;
-    } 
-    if (String(jpeg_size) == "2592x1944") {
-      jpeg_size_id = 6;
-    }
+  if (String(jpeg_size) == "1024x768") {
+   jpeg_size_id = 2;
+  }
+  if (String(jpeg_size) == "1280x1024") {
+   jpeg_size_id = 3;
+  }
+  if (String(jpeg_size) == "1600x1200") {
+   jpeg_size_id = 4;
+  } 
+  if (String(jpeg_size) == "2048x1536") {
+   jpeg_size_id = 5;
+  } 
+  if (String(jpeg_size) == "2592x1944") {
+   jpeg_size_id = 6;
+  }
     
     temp=SPI.transfer(0x00);
     myCAM.clear_bit(6, GPIO_PWDN_MASK); //disable low power
@@ -491,7 +403,6 @@ void setup() {
      // ARDUCHIP_TIM, VSYNC_LEVEL_MASK
      myCAM.write_reg(3, 2);   //VSYNC is active HIGH
      myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-   }
   }
   
   u8cursor = u8cursor+u8newline;
@@ -500,15 +411,12 @@ void setup() {
   myCAM.clear_fifo_flag();
   if (cameraMosfetReady) { cameraOff(); }
   // Set up mDNS responder:
-  // - first argument is the domain name, in FS2 the fully-qualified domain name is "cam.local"
-  // - second argument is the IP address to advertise
-  if (onlineMode) {
+  if (onlineMode) {  //TODO Check if this onlineMode thing makes sense
     if (!MDNS.begin(localDomain)) {
       while(1) { 
         delay(500);
       }
     }
-    // Add service to MDNS-SD
     MDNS.addService("http", "tcp", 80);
     
     u8cursor = u8cursor+u8newline;
@@ -516,11 +424,9 @@ void setup() {
     
     // ROUTING
     defineServerRouting();
-    
     server.onNotFound(handleWebServerRoot);
     server.begin();
   }
-  lastTimeLapse = millis() + timelapseMillis;  // Initialize timelapse
 
   }
 
@@ -529,16 +435,13 @@ String camCapture(ArduCAM myCAM) {
   uint32_t bytesAvailableSpiffs = SPIFFS.totalBytes()-SPIFFS.usedBytes();
   uint32_t len  = myCAM.read_fifo_length();
 
-  //printMessage("photoCount: "+String(memory.photoCount));
-  //printMessage(String(bytesAvailableSpiffs/1024)+ " Kb avail");
   if (len*2 > bytesAvailableSpiffs && saveInSpiffs) {
     memory.photoCount = 1;
-    printMessage("count reseted 1");
+    printMessage("Count reset 1");
   }
   long full_length;
   
-  if (len == 0) //0 kb
-  {
+  if (len == 0) {
     message = "ERR read memory";
     printMessage(message);
     return message;
@@ -546,9 +449,6 @@ String camCapture(ArduCAM myCAM) {
 
   myCAM.CS_LOW();
   myCAM.set_fifo_burst();
-  if (cameraModelId == 5) {
-    SPI.transfer(0xFF);
-  }
   if (client.connect(upload_host, 80) || onlineMode) { 
     if (onlineMode) {
       while(client.available()) {
@@ -640,35 +540,20 @@ void serverCapture() {
   digitalWrite(ledStatus, HIGH);
   if (cameraMosfetReady) { cameraInit(); }
   // Set back the selected resolution
-  if (cameraModelId == 5) {
-    myCAM.OV2640_set_JPEG_size(jpeg_size_id);
-    myCAM.OV2640_set_Special_effects(cameraSetValue);
-  } else if (cameraModelId == 3) {
-    myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-    myCAM.OV5642_set_Exposure_level(cameraSetValue);
-    Serial.println("exposure:"+String(cameraSetValue));
-  }
+  myCAM.OV5642_set_JPEG_size(jpeg_size_id);
+  myCAM.OV5642_set_Exposure_level(cameraSetExposure);
   delay(5);
   start_capture();
   printMessage("CAPTURING", true, true);
   u8cursor = u8cursor+u8newline;
+  int total_time = millis();
+  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
+   delay(1);
+  } 
 
-  int total_time = 0;
-  total_time = millis();
-  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)); 
-  total_time = millis() - total_time;
- 
-  Serial.print("capture total_time used in millisec:");
-  Serial.println(total_time, DEC);
-  
-  if (onlineMode) {
-    shutterPing();
-  }
-  total_time = 0;
-  total_time = millis();
   String response = camCapture(myCAM);
   total_time = millis() - total_time;
-  printMessage("Upload in "+String(total_time)+ " ms.");
+  printMessage("Upload in "+String(total_time/1000)+ " s.");
   Serial.print("RENDER THUMB json bytes:"+String(response.length())+" ");
   
   if (cameraMosfetReady) { cameraOff(); }
@@ -809,14 +694,7 @@ void serverCameraParams() {
 
 // Button events
 void shutterReleased() {
-    digitalWrite(ledStatusTimelapse, LOW);
-    captureTimeLapse = false;
     serverCapture();
-}
-void shutterLongClick() {
-    digitalWrite(ledStatusTimelapse, HIGH);
-    captureTimeLapse = true;
-    lastTimeLapse = millis() + timelapseMillis;
 }
 
 void serverDeepSleep() {
@@ -839,18 +717,14 @@ void serverDeepSleep() {
 void cameraInit() {
   digitalWrite(gpioCameraVcc, LOW);       // Power camera ON
 
-  if (cameraModelId == 3) {               // OV5642 Needs special settings otherwise will not wake up
-     myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
-     delay(3);
-     myCAM.set_format(JPEG);
-     myCAM.InitCAM();
-     delay(50); 
-     myCAM.write_reg(3, 2);               // VSYNC is active HIGH
-     delay(47); 
-  } else {
-     myCAM.set_format(JPEG);
-     myCAM.InitCAM();
-  }
+  // OV5642 Needs special settings otherwise will not wake up
+  myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
+  delay(3);
+  myCAM.set_format(JPEG);
+  myCAM.InitCAM();
+  delay(50); 
+  myCAM.write_reg(3, 2);               // VSYNC is active HIGH
+  delay(47);
 }
 
 void cameraOff() {
@@ -859,14 +733,11 @@ void cameraOff() {
 
 void serverStream() {
   if (cameraMosfetReady) { cameraInit(); }
-    printMessage("STREAMING");
-  if (cameraModelId == 5) {
-    myCAM.OV2640_set_JPEG_size(2);
-  } else if (cameraModelId == 3) {
-    myCAM.OV5642_set_JPEG_size(1);
-  }
-  WiFiClient client = server.client();
+  delay(10);
+  printMessage("STREAMING");
+  myCAM.OV5642_set_JPEG_size(1);
 
+  WiFiClient client = server.client();
   String response = "HTTP/1.1 200 OK\r\n";
   response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
   server.sendContent(response);
@@ -879,7 +750,10 @@ void serverStream() {
        Serial.print(String(counter)+" % NN Matched handleClient()");
     }
     start_capture();
-    while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK));
+    while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
+       // server.handleClient(); ?
+       delay(0);
+    }
     size_t len = myCAM.read_fifo_length();
 
     if (len == 0 ) //0 kb
@@ -917,9 +791,6 @@ void serverStream() {
         {
           //Write bufferSize bytes image data to file
           myCAM.CS_HIGH();
-          if (!client.connected()) {
-            client.stop(); is_header = false; break;
-          }
           client.write(&buffer[0], bufferSize);
           i = 0;
           buffer[i++] = temp;
@@ -945,20 +816,5 @@ void loop() {
    if (onlineMode) { 
     server.handleClient(); 
    }
-  
-  if (captureTimeLapse && millis() >= lastTimeLapse) {
-    lastTimeLapse += timelapseMillis;
-    serverCapture();
-    printMessage("> Timelapse captured");
-  }
-
-  //Enable to see touch readings in display (Since it's different without USB connected)  Note: Calibration may be a daunting task
-  //printMessage(String(touchRead(gpioTouch)),true);delay(200);printMessage("",true,true);
-  if (touchEnabled && (touchRead(gpioTouch) < touchThreshold)) {
-    //printMessage(String(touchInitialRead));
-    shutterReleased();
-  } 
-  if (!touchEnabled)  {
-    buttonShutter.tick();
-  }
+  buttonShutter.tick();
 }

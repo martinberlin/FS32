@@ -37,32 +37,11 @@
     <div class='row'>
         <div class='col-md-12 text-right'>
             <input id='stream' data-on='Stream ON' data-off='Disabled' type='checkbox'>
-            <input id='timelapse' data-on='Timelapse ON' data-off='Disabled' type='checkbox'>
+            <input class="d-none" id='timelapse' data-on='Timelapse ON' data-off='Disabled' type='checkbox'>
         </div>
     </div>
     <div class='row'>
-        <!-- Unhide this if you want effects on the OV2640: Remove .d-none class (Now is controlled by a javascript line loaded at the end) -->
-        <div class="col-md-6 col-xs-6 d-none" id="effects">
-            <div class="dropdown">
-                <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">Effects
-                    <span class="caret"></span></button>
-                <ul class="dropdown-menu nodec">
-                    <li><a href="/set?effect=7" target='frame'><span style="color:#EEE">&#11044;</span> No effect</a></li>
-                    <li><a href="/set?effect=4" target='frame'><span style="color:#CCC">&#11044;</span> Black&White</a></li>
-                    <li><a href="/set?effect=3" target='frame'><span style="color:#ef492e">&#11044;</span> Reddish</a></li>
-                    <li><a href="/set?effect=2" target='frame'><span style="color:#46e12e">&#11044;</span> Greenish</a></li>
-                    <li><a href="/set?effect=1" target='frame'><span style="color:#5184f8">&#11044;</span> Bluish</a></li>
-                    <li><a href="/set?effect=0" target='frame'><span style="color:#831600">&#11044;</span> Antique</a></li>
-                    <li><a href="/set?effect=5" target='frame'><span style="color:#F9F9F9">&#11044;</span> Color negative</a></li>
-                    <li><a href="/set?effect=6" target='frame'><span style="color:#000">&#11044;</span> BW negative</a></li>
-                    <li><a href="/set?effect=8" target='frame'><span style="color:#821300">&#11044;</span> Sepia</a></li>
-                    <li><a href="/set?effect=9"  target='frame'><span style="color:#b14200">&#11044;</span> Over exposure</a></li>
-                    <li><a href="/set?effect=10" target='frame'><span style="color:#FFFF00">&#11044;</span> Solarize</a></li>
-                </ul>
-            </div>
-        </div>
-        <!-- Unhide this if you want exposure on the OV5642: Remove .d-none class -->
-        <div class="col-md-6 col-xs-6 d-none" id="exposure">
+        <div class="col-md-6 col-xs-6" id="exposure">
             <div class="dropdown">
                 <button class="btn btn-default dropdown-toggle" type="button" data-toggle="dropdown">Exposure
                     <span class="caret"></span></button>
@@ -132,18 +111,10 @@
             }
         })
     });
-    $(function () {
-        $('#timelapse').bootstrapToggle({
-            on: 'Timelapse ON', off: 'Timelapse OFF'
-        });
-        $('#timelapse').change(function() {
-            if ($(this).prop('checked')) {
-                frame.location = '/timelapse/start';
-            } else {
-                frame.location = '/timelapse/stop';
-            }
+    /* $(function () { 
+        $('#timelapse').bootstrapToggle({ on: 'Timelapse ON', off: 'Timelapse OFF' });
+        $('#timelapse').change(function() { if ($(this).prop('checked')) { frame.location = '/timelapse/start';
+            } else { frame.location = '/timelapse/stop'; }
         })
-    });
+    }); */
 </script>
-<!-- Note this JS is dynamically generated from ESP WebServer -->
-<script src="dynamicJavascript.js"></script>

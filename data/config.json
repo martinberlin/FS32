@@ -3,6 +3,5 @@
   "upload_host" : "api.slosarek.eu",
   "upload_path" : "/camera-uploads/upload-xbm.php?f=Tests",
   "slave_cam_ip": "",
-  "jpeg_size" : "1600x1200",
-  "ms_before_capture" : 500
+  "jpeg_size" : "1600x1200"
 }
