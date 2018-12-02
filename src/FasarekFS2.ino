@@ -36,10 +36,9 @@
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 
 // CAMERA CONFIGURATION
-// Goes together if cameraMosfetReady is enabled Arducam will turn on only to take the picture
-// In turn it should be connected to a Mosfet that on HIGH will cut the VCC to the camera (Do not use VEXT, since it won't support the +150mA of the camera)
-const boolean cameraMosfetReady = false;       // cameraMosfetReady determines if 
-const byte gpioCameraVcc = 21;                 // GPIO21 -- Vext control on HIGH will turn camera off after taking picture (energy saving)
+const boolean cameraMosfetReady = true;       // cameraMosfetReady determines if 
+const byte gpioCameraVcc = 36;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
+// NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
 bool saveInSpiffs = true;                      // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
