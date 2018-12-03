@@ -66,21 +66,6 @@ void start_capture() {
   myCAM.start_capture();
 }
 
-void serverStartTimelapse() {
-    digitalWrite(ledStatusTimelapse, HIGH);
-    printMessage("TIMELAPSE enabled");
-    captureTimeLapse = true;
-    lastTimeLapse = millis() + timelapseMillis;
-    server.send(200, "text/html", "<div id='m'>Start Timelapse</div>"+ javascriptFadeMessage);
-}
-
-void serverStopTimelapse() {
-    digitalWrite(ledStatusTimelapse, LOW);
-    printMessage("TIMELAPSE disabled");
-    captureTimeLapse = false;
-    server.send(200, "text/html", "<div id='m'>Stop Timelapse</div>"+ javascriptFadeMessage);
-}
-
 void serverStopStream() {
     printMessage("STREAM stopped", true, true);
     server.send(200, "text/html", "<div id='m'>Streaming stoped</div>"+ javascriptFadeMessage);
@@ -90,17 +75,10 @@ void serverStopStream() {
  * Update camera settings (Effects / Exposure only on OV5642)
  */
 void serverCameraSettings() {
-     String argument  = server.argName(0);
-     String setValue = server.arg(0);
-     if (argument == "effect") {
-       cameraSetting = "effect";
-       cameraSetValue= setValue.toInt();
-     }
-     if (argument == "exposure" && cameraModelId == 3) {
-        cameraSetting = "exposure";
-        cameraSetValue= setValue.toInt();
-     }
-     server.send(200, "text/html", "<div id='m'>"+argument+" updated to value "+setValue+"<br>See it on effect on next photo</div>"+ javascriptFadeMessage);
+  String argument = server.argName(0);
+  String setValue = server.arg(0);
+  cameraSetExposure = setValue.toInt();
+  server.send(200, "text/html", "<div id='m'>"+argument+" updated to value "+setValue+"<br>See it on effect on next photo</div>"+ javascriptFadeMessage);
 }
 
 /**

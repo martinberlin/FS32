@@ -136,17 +136,3 @@ void serverDeleteFile() {
     }
   }
 }
-
-// Deliver a mini-javascript to enable selection dropdowns for different camera models
-void serverDynamicJs() {
-  String js;
-  if (cameraModelId == 5) { // OV2640
-    js = "$('#effects').removeClass('d-none');";
-  }
-  if (cameraModelId == 3) { // OV5642
-    js = "$('#exposure').removeClass('d-none');";
-  }
-
-   server.send(200, "application/javascript", js);
-}
-
