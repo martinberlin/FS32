@@ -515,10 +515,7 @@ String camCapture(ArduCAM myCAM) {
 void serverCapture() {
   digitalWrite(ledStatus, HIGH);
   if (cameraMosfetReady) { cameraInit(); }
-  // Set back the selected resolution
-  myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-  myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-  //Serial.println("___exposure: "+String(cameraSetExposure));
+  
   start_capture();
   printMessage("CAPTURING", true, true);
   u8cursor = u8cursor+u8newline;
@@ -692,14 +689,23 @@ void serverDeepSleep() {
 
 void cameraInit() {
   digitalWrite(gpioCameraVcc, LOW);       // Power camera ON
-  delay(250);
+  delay(100);
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
-  delay(3);
+  delay(10);
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
-  delay(750); // 250
+  int waitMs = 750+(100*cameraSetExposure);
+  Serial.println("waitMS: "+String(waitMs));
+  delay(waitMs);  // 750 base
   myCAM.write_reg(3, 2);               // VSYNC is active HIGH
   delay(3);
+  // Set back the selected resolution
+  myCAM.OV5642_set_JPEG_size(jpeg_size_id);
+  // Set Exposure many times does not work and will generate a corrupt and big JPEG
+  //myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+  //delay(3);
+  Serial.println("___exposure: "+String(cameraSetExposure));
+
   // NOTE : In some OV5642 Models just doing a 200 Miliseconds total delay is enough
   //        in other models, with doing in total about 800 Miliseconds wait after camera turns on
   //        the picture will be black, or oversize, and not readable.
