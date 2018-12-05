@@ -14,7 +14,7 @@
 // SCK  18
 // SDA  21
 // SCL  22
-// SHU  00 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
+// SHU  04 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
 // LED  12 ledStatus
 // OLED Display /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16
 #include <Arduino.h>
@@ -36,11 +36,12 @@
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 
 // CAMERA CONFIGURATION
-const boolean cameraMosfetReady = true;       // cameraMosfetReady determines if 
-const byte gpioCameraVcc = 36;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
+const boolean cameraMosfetReady = true;        // cameraMosfetReady determines if 
+// cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
+const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = true;                      // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = false;                     // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
@@ -233,7 +234,6 @@ void setup() {
   digitalWrite(gpioCameraVcc, LOW); // Power camera ON
   // Read memory struct from EEPROM
   EEPROM_readAnything(0, memory);
-  printMessage("FS32");
 
   // Read configuration from FS json
   if (SPIFFS.begin()) {
@@ -384,31 +384,11 @@ void setup() {
    jpeg_size_id = 6;
   }
     
-    temp=SPI.transfer(0x00);
-    myCAM.clear_bit(6, GPIO_PWDN_MASK); //disable low power
-    //Check if the camera module type is OV5642
-    myCAM.wrSensorReg16_8(0xff, 0x01);
-    myCAM.rdSensorReg16_8(12298, &vid);
-    myCAM.rdSensorReg16_8(12299, &pid);
-
-   if((vid != 0x56) || (pid != 0x42)) {
-     printMessage("ERR conn OV5642");
-     
-   } else {
-     printMessage("CAMERA READY", true, true);
+     printMessage("FS2 CAMERA READY", true, true);
+     u8cursor = u8cursor+u8newline;
+     printMessage("Res: "+ String(jpeg_size), true);
      printMessage(IpAddress2String(WiFi.localIP()));
-     myCAM.set_format(JPEG);
-     myCAM.InitCAM();
-     // ARDUCHIP_TIM, VSYNC_LEVEL_MASK
-     myCAM.write_reg(3, 2);   //VSYNC is active HIGH
-     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-  }
-  
-  u8cursor = u8cursor+u8newline;
-  printMessage("Res: "+ String(jpeg_size));
 
-  myCAM.clear_fifo_flag();
-  if (cameraMosfetReady) { cameraOff(); }
   // Set up mDNS responder:
   if (onlineMode) {  //TODO Check if this onlineMode thing makes sense
     if (!MDNS.begin(localDomain)) {
@@ -417,9 +397,6 @@ void setup() {
       }
     }
     MDNS.addService("http", "tcp", 80);
-    
-    u8cursor = u8cursor+u8newline;
-    printMessage("http://"+String(localDomain)+".local"); 
     
     // ROUTING
     defineServerRouting();
@@ -541,7 +518,7 @@ void serverCapture() {
   // Set back the selected resolution
   myCAM.OV5642_set_JPEG_size(jpeg_size_id);
   myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-  delay(5);
+  //Serial.println("___exposure: "+String(cameraSetExposure));
   start_capture();
   printMessage("CAPTURING", true, true);
   u8cursor = u8cursor+u8newline;
@@ -715,19 +692,22 @@ void serverDeepSleep() {
 
 void cameraInit() {
   digitalWrite(gpioCameraVcc, LOW);       // Power camera ON
-
-  // OV5642 Needs special settings otherwise will not wake up
+  delay(250);
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
   delay(3);
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
-  delay(50); 
+  delay(750); // 250
   myCAM.write_reg(3, 2);               // VSYNC is active HIGH
-  delay(47);
+  delay(3);
+  // NOTE : In some OV5642 Models just doing a 200 Miliseconds total delay is enough
+  //        in other models, with doing in total about 800 Miliseconds wait after camera turns on
+  //        the picture will be black, or oversize, and not readable.
 }
 
 void cameraOff() {
   digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
+  Serial.println("cameraOff()");
 }
 
 void serverStream() {
