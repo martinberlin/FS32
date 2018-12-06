@@ -36,7 +36,7 @@
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 
 // CAMERA CONFIGURATION
-const boolean cameraMosfetReady = true;        // cameraMosfetReady determines if 
+// camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
@@ -90,7 +90,8 @@ char timelapse[4] = "60";
 char upload_host[120] = "api.slosarek.eu";
 char upload_path[240] = "/your/upload.php";
 char slave_cam_ip[16] = "";
-char jpeg_size[10]  = "1600x1200";
+char jpeg_size[10]    = "1600x1200";
+char camera_mosfet[2] = "0";
 
 // SPIFFS and memory to save photos
 File fsFile;
@@ -231,7 +232,7 @@ void setup() {
   pinMode(CS, OUTPUT);
   pinMode(gpioCameraVcc, OUTPUT);
   pinMode(ledStatus, OUTPUT);
-  digitalWrite(gpioCameraVcc, LOW); // Power camera ON
+  digitalWrite(gpioCameraVcc, LOW); // Turn camera ON
   // Read memory struct from EEPROM
   EEPROM_readAnything(0, memory);
 
@@ -254,7 +255,7 @@ void setup() {
           strcpy(upload_path, json["upload_path"]);
           strcpy(slave_cam_ip, json["slave_cam_ip"]);
           strcpy(jpeg_size, json["jpeg_size"]);
-
+          strcpy(camera_mosfet, json["camera_mosfet"]);
         } else {
           printMessage("ERR load config");
         }
@@ -275,6 +276,7 @@ void setup() {
   WiFiManagerParameter param_slave_cam_ip("slave_cam_ip", "Slave cam ip/ping", slave_cam_ip,16);
   WiFiManagerParameter param_upload_host("upload_host", "API host for upload", upload_host,120);
   WiFiManagerParameter param_upload_path("upload_path", "Path to API endoint", upload_path,240);
+  WiFiManagerParameter param_camera_mosfet("camera_mosfet", "Camera on only when taking photo (1)", camera_mosfet, 1);
   WiFiManagerParameter param_jpeg_size("jpeg_size", "Select JPG Size: 640x480 1024x768 1280x1024 1600x1200 (2 & 5mp) / 2048x1536 2592x1944 (only 5mp)", jpeg_size, 10);
  
  if (onlineMode) {
@@ -291,7 +293,7 @@ void setup() {
   wm.addParameter(&param_upload_host);
   wm.addParameter(&param_upload_path);
   wm.addParameter(&param_jpeg_size);
-  
+  wm.addParameter(&param_camera_mosfet);
   wm.setMinimumSignalQuality(20);
   // Callbacks configuration
   wm.setSaveParamsCallback(saveParamCallback);
@@ -318,7 +320,7 @@ void setup() {
   strcpy(upload_host, param_upload_host.getValue());
   strcpy(upload_path, param_upload_path.getValue());
   strcpy(jpeg_size, param_jpeg_size.getValue());
-
+  strcpy(camera_mosfet, param_camera_mosfet.getValue());
   if (shouldSaveConfig) {
     printMessage("Save config.json", true, true);
     DynamicJsonBuffer jsonBuffer;
@@ -328,12 +330,13 @@ void setup() {
     json["upload_host"] = upload_host;
     json["upload_path"] = upload_path;
     json["jpeg_size"] = jpeg_size;
+    json["camera_mosfet"] = camera_mosfet;
     Serial.println("timelapse:"+String(timelapse));
     Serial.println("slave_cam_ip:"+String(slave_cam_ip));
     Serial.println("upload_host:"+String(upload_host));
     Serial.println("upload_path:"+String(upload_path));
     Serial.println("jpeg_size:"+String(jpeg_size));
-    
+    Serial.println("camera_mosfet:"+String(camera_mosfet));
     File configFile = SPIFFS.open("/config.json", FILE_WRITE);
     if (!configFile) {
       printMessage("ERR config file");
@@ -355,16 +358,6 @@ void setup() {
   SPI.begin();
   SPI.setFrequency(4000000); //4MHz
 
-  //Check if the ArduCAM SPI bus is OK
-  myCAM.write_reg(ARDUCHIP_TEST1, 0x55);
-  temp = myCAM.read_reg(ARDUCHIP_TEST1);
-  if (temp != 0x55) {
-    printMessage("ERR SPI: Check");
-    printMessage("ArduCam wiring");
-    delay(10000);
-    serverDeepSleep();
-  }
-
   if (String(jpeg_size) == "640x480") {
    jpeg_size_id = 1;
   }
@@ -383,7 +376,41 @@ void setup() {
   if (String(jpeg_size) == "2592x1944") {
    jpeg_size_id = 6;
   }
-    
+  
+  Serial.println(">>>camera_mosfet:"+String(camera_mosfet)+" compare to 0:"+String((strcmp(camera_mosfet,"0")==0)));
+  if (strcmp(camera_mosfet,"0")==0) {
+    Serial.println(">>>camera_mosfet is 0: starting OV5642 on setup()");
+    //Check if the ArduCAM SPI bus is OK
+    myCAM.write_reg(ARDUCHIP_TEST1, 0x55);
+    temp = myCAM.read_reg(ARDUCHIP_TEST1);
+    if (temp != 0x55) {
+      printMessage("ERR SPI: Check");
+      printMessage("ArduCam wiring");
+      delay(10000);
+      serverDeepSleep();
+    }
+
+    SPI.transfer(0x00);
+    myCAM.clear_bit(6, GPIO_PWDN_MASK); //disable low power
+    //Check if the camera module type is OV5642
+    myCAM.wrSensorReg16_8(0xff, 0x01);
+    myCAM.rdSensorReg16_8(12298, &vid);
+    myCAM.rdSensorReg16_8(12299, &pid);
+
+    if((vid != 0x56) || (pid != 0x42)) {
+      printMessage("ERR conn OV5642");
+      delay(10000);
+      serverDeepSleep();
+    } else {
+      myCAM.set_format(JPEG);
+      myCAM.InitCAM();
+      // ARDUCHIP_TIM, VSYNC_LEVEL_MASK
+      myCAM.write_reg(3, 2);   //VSYNC is active HIGH 
+    }
+
+  } else {
+    digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
+  }
      printMessage("FS2 CAMERA READY", true, true);
      u8cursor = u8cursor+u8newline;
      printMessage("Res: "+ String(jpeg_size), true);
@@ -514,11 +541,8 @@ String camCapture(ArduCAM myCAM) {
 
 void serverCapture() {
   digitalWrite(ledStatus, HIGH);
-  if (cameraMosfetReady) { cameraInit(); }
-  // Set Exposure many times does not work and will make a corrupt and big JPG
-  myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-  delay(3);
-  Serial.println("___exposure: "+String(cameraSetExposure));
+  cameraInit();
+  
   start_capture();
   printMessage("CAPTURING", true, true);
   u8cursor = u8cursor+u8newline;
@@ -531,8 +555,7 @@ void serverCapture() {
   total_time = millis() - total_time;
   printMessage("Upload in "+String(total_time/1000)+ " s.");
   Serial.print("RENDER THUMB json bytes:"+String(response.length())+" ");
-  
-  if (cameraMosfetReady) { cameraOff(); }
+  cameraOff();
 
   DynamicJsonBuffer jsonBuffer;
   JsonObject& json = jsonBuffer.parseObject(response);
@@ -691,6 +714,15 @@ void serverDeepSleep() {
 }
 
 void cameraInit() {
+  if (strcmp(camera_mosfet,"0")==0) {
+    // Set back the selected resolution
+    myCAM.OV5642_set_JPEG_size(jpeg_size_id);
+    // Set Exposure many times does not work and will make a corrupt and big JPG
+    // myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+    delay(3);
+    Serial.println("___exposure: "+String(cameraSetExposure));
+    return;
+  }
   digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
   delay(100);
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
@@ -698,25 +730,25 @@ void cameraInit() {
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
   int waitMs = 750+(80*cameraSetExposure);
-  Serial.println("waitMS: "+String(waitMs));
+  Serial.println("cameraInit() waitMS: "+String(waitMs));
   delay(waitMs);                       // 750 base
   myCAM.write_reg(3, 2);               // VSYNC is active HIGH
   delay(3);
-  // Set back the selected resolution
   myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-
+  myCAM.OV5642_set_Exposure_level(cameraSetExposure);
   // NOTE : In some OV5642 Models just doing a 200 Miliseconds total delay is enough
   //        in other models, with doing in total about 800 Miliseconds wait after camera turns on
   //        the picture will be black, or oversize, and not readable.
 }
 
 void cameraOff() {
+  if (strcmp(camera_mosfet,"0")==0) return;
   digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
   Serial.println("cameraOff()");
 }
 
 void serverStream() {
-  if (cameraMosfetReady) { cameraInit(); }
+  cameraInit();
   delay(10);
   printMessage("STREAMING");
   myCAM.OV5642_set_JPEG_size(1);
@@ -793,7 +825,7 @@ void serverStream() {
       client.stop(); is_header = false; break;
     }
   }
-  if (cameraMosfetReady) { cameraOff(); }
+  cameraOff();
 }
 
 void loop() {
