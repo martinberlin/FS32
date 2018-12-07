@@ -28,7 +28,7 @@
 #include <ArduCAM.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <OneButton.h>;
+#include <OneButton.h>
 #include <ArduinoJson.h>    // Any version > 5.13.3 gave me an error on swap function
 #include <WebServer.h>
 #include <U8g2lib.h>        // OLED display I2C Settings are for Heltec board, change it to suit yours:
@@ -46,7 +46,7 @@ bool saveInSpiffs = false;                     // Whether to save the jpg also i
 
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
-char* localDomain        = "cam";              // mDNS: cam.local
+const char* localDomain  = "cam";              // mDNS: cam.local
 
 #include "memorysaver.h"    // Uncomment the #define OV5642_MINI_5MP_PLUS
 // NOTE:     ArduCAM owners please also make sure to choose your camera module in the ../libraries/ArduCAM/memorysaver.h
@@ -107,8 +107,8 @@ byte u8cursor = 1;
 byte u8newline = 5;
 String cameraSetting;
 byte   cameraSetExposure;
-#include "FS2helperFunctions.h"; // Helper methods: printMessage + EPROM
-#include "serverFileManager.h";  // Responds to the FS Routes
+#include "FS2helperFunctions.h"  // Helper methods: printMessage + EPROM
+#include "serverFileManager.h"   // Responds to the FS Routes
 // ROUTING Definitions
 void defineServerRouting() {
     server.on("/capture", HTTP_GET, serverCapture);
