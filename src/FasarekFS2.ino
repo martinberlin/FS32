@@ -125,7 +125,7 @@ void defineServerRouting() {
     server.onNotFound(handleWebServerRoot);
     server.begin();
 }
-String md5Hash;
+String camHash;
 // Default image (LOGO?)
 static unsigned char image[] U8X8_PROGMEM  = {
   0x00, 0xC0, 0xFF, 0xFF, 0xFF, 0x0F, 0x00, 0x00, 0xFE, 0xFF, 0xFF, 0x17, 
@@ -474,7 +474,12 @@ String camCapture(ArduCAM myCAM) {
     client.println();
     client.print(start_request);
   if (saveInSpiffs) {
-    fsFile = SPIFFS.open("/"+String(memory.photoCount)+".jpg", "w");
+    String filename = String(memory.photoCount)+".jpg";
+     if (SPIFFS.exists("/"+filename)) {
+        SPIFFS.remove("/"+filename);
+     }
+    printMessage("Saving: "+filename);
+    fsFile = SPIFFS.open("/"+filename, "w");
   }
   // Read image data from Arducam mini and send away to internet
   static uint8_t buffer[bufferSize] = {0xFF};
@@ -492,12 +497,11 @@ String camCapture(ArduCAM myCAM) {
         fsFile.write(&buffer[0], will_copy);
       }
       len -= will_copy;
-      delay(0);
+      delay(1);
   }
 
   _md5.calculate();
-  md5Hash = _md5.toString();
-  Serial.println(">> md5: "+md5Hash);
+  camHash = _md5.toString();
   if (fsFile) {
     fsFile.close();
     memory.photoCount++;
@@ -603,11 +607,16 @@ void serverCapture() {
   u8g2.clearBuffer();
   u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
   u8g2.sendBuffer();
-  Serial.println("Capture HASH: " +md5Hash);
+  
   String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
-  if (md5Hash == hash) {
+  char camHashChar[33];
+  camHash.toCharArray(camHashChar,33);
+  Serial.println("cam HASH: " +camHash);
+  Serial.println("api HASH: " +String(hash));
+  
+  if (strcmp(camHashChar, hash) == 0) {
       printMessage("OK");
-      hashCheck = "<label style='color:green'>Image verified: "+md5Hash+"</label>";
+      hashCheck = "<label style='color:green'>Image verified: "+camHash+"</label>";
   } else {
     printMessage("UP. CORRUPT");
   }
