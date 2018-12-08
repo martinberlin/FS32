@@ -14,7 +14,7 @@
 // SCK  18
 // SDA  21
 // SCL  22
-// SHU  00 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
+// SHU  04 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
 // LED  12 ledStatus
 // OLED Display /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16
 #include <Arduino.h>
@@ -28,24 +28,26 @@
 #include <ArduCAM.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <OneButton.h>;
+#include <OneButton.h>
 #include <ArduinoJson.h>    // Any version > 5.13.3 gave me an error on swap function
 #include <WebServer.h>
 #include <U8g2lib.h>        // OLED display I2C Settings are for Heltec board, change it to suit yours:
-
+#include <MD5Builder.h>
+MD5Builder _md5;
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 
 // CAMERA CONFIGURATION
-const boolean cameraMosfetReady = true;       // cameraMosfetReady determines if 
-const byte gpioCameraVcc = 36;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
+// camera_mosfet now moved to WM parameters please set it up on /data/config.json
+// cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
+const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = true;                      // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = true;                     // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
-char* localDomain        = "cam";              // mDNS: cam.local
+const char* localDomain  = "cam";              // mDNS: cam.local
 
 #include "memorysaver.h"    // Uncomment the #define OV5642_MINI_5MP_PLUS
 // NOTE:     ArduCAM owners please also make sure to choose your camera module in the ../libraries/ArduCAM/memorysaver.h
@@ -89,7 +91,8 @@ char timelapse[4] = "60";
 char upload_host[120] = "api.slosarek.eu";
 char upload_path[240] = "/your/upload.php";
 char slave_cam_ip[16] = "";
-char jpeg_size[10]  = "1600x1200";
+char jpeg_size[10]    = "1600x1200";
+char camera_mosfet[2] = "0";
 
 // SPIFFS and memory to save photos
 File fsFile;
@@ -105,8 +108,8 @@ byte u8cursor = 1;
 byte u8newline = 5;
 String cameraSetting;
 byte   cameraSetExposure;
-#include "FS2helperFunctions.h"; // Helper methods: printMessage + EPROM
-#include "serverFileManager.h";  // Responds to the FS Routes
+#include "FS2helperFunctions.h"  // Helper methods: printMessage + EPROM
+#include "serverFileManager.h"   // Responds to the FS Routes
 // ROUTING Definitions
 void defineServerRouting() {
     server.on("/capture", HTTP_GET, serverCapture);
@@ -122,7 +125,7 @@ void defineServerRouting() {
     server.onNotFound(handleWebServerRoot);
     server.begin();
 }
-
+String md5Hash;
 // Default image (LOGO?)
 static unsigned char image[] U8X8_PROGMEM  = {
   0x00, 0xC0, 0xFF, 0xFF, 0xFF, 0x0F, 0x00, 0x00, 0xFE, 0xFF, 0xFF, 0x17, 
@@ -230,10 +233,9 @@ void setup() {
   pinMode(CS, OUTPUT);
   pinMode(gpioCameraVcc, OUTPUT);
   pinMode(ledStatus, OUTPUT);
-  digitalWrite(gpioCameraVcc, LOW); // Power camera ON
+  digitalWrite(gpioCameraVcc, LOW); // Turn camera ON
   // Read memory struct from EEPROM
   EEPROM_readAnything(0, memory);
-  printMessage("FS32");
 
   // Read configuration from FS json
   if (SPIFFS.begin()) {
@@ -254,7 +256,7 @@ void setup() {
           strcpy(upload_path, json["upload_path"]);
           strcpy(slave_cam_ip, json["slave_cam_ip"]);
           strcpy(jpeg_size, json["jpeg_size"]);
-
+          strcpy(camera_mosfet, json["camera_mosfet"]);
         } else {
           printMessage("ERR load config");
         }
@@ -275,6 +277,7 @@ void setup() {
   WiFiManagerParameter param_slave_cam_ip("slave_cam_ip", "Slave cam ip/ping", slave_cam_ip,16);
   WiFiManagerParameter param_upload_host("upload_host", "API host for upload", upload_host,120);
   WiFiManagerParameter param_upload_path("upload_path", "Path to API endoint", upload_path,240);
+  WiFiManagerParameter param_camera_mosfet("camera_mosfet", "Camera on only when taking photo (1)", camera_mosfet, 1);
   WiFiManagerParameter param_jpeg_size("jpeg_size", "Select JPG Size: 640x480 1024x768 1280x1024 1600x1200 (2 & 5mp) / 2048x1536 2592x1944 (only 5mp)", jpeg_size, 10);
  
  if (onlineMode) {
@@ -291,7 +294,7 @@ void setup() {
   wm.addParameter(&param_upload_host);
   wm.addParameter(&param_upload_path);
   wm.addParameter(&param_jpeg_size);
-  
+  wm.addParameter(&param_camera_mosfet);
   wm.setMinimumSignalQuality(20);
   // Callbacks configuration
   wm.setSaveParamsCallback(saveParamCallback);
@@ -318,7 +321,7 @@ void setup() {
   strcpy(upload_host, param_upload_host.getValue());
   strcpy(upload_path, param_upload_path.getValue());
   strcpy(jpeg_size, param_jpeg_size.getValue());
-
+  strcpy(camera_mosfet, param_camera_mosfet.getValue());
   if (shouldSaveConfig) {
     printMessage("Save config.json", true, true);
     DynamicJsonBuffer jsonBuffer;
@@ -328,12 +331,13 @@ void setup() {
     json["upload_host"] = upload_host;
     json["upload_path"] = upload_path;
     json["jpeg_size"] = jpeg_size;
+    json["camera_mosfet"] = camera_mosfet;
     Serial.println("timelapse:"+String(timelapse));
     Serial.println("slave_cam_ip:"+String(slave_cam_ip));
     Serial.println("upload_host:"+String(upload_host));
     Serial.println("upload_path:"+String(upload_path));
     Serial.println("jpeg_size:"+String(jpeg_size));
-    
+    Serial.println("camera_mosfet:"+String(camera_mosfet));
     File configFile = SPIFFS.open("/config.json", FILE_WRITE);
     if (!configFile) {
       printMessage("ERR config file");
@@ -355,16 +359,6 @@ void setup() {
   SPI.begin();
   SPI.setFrequency(4000000); //4MHz
 
-  //Check if the ArduCAM SPI bus is OK
-  myCAM.write_reg(ARDUCHIP_TEST1, 0x55);
-  temp = myCAM.read_reg(ARDUCHIP_TEST1);
-  if (temp != 0x55) {
-    printMessage("ERR SPI: Check");
-    printMessage("ArduCam wiring");
-    delay(10000);
-    serverDeepSleep();
-  }
-
   if (String(jpeg_size) == "640x480") {
    jpeg_size_id = 1;
   }
@@ -383,32 +377,46 @@ void setup() {
   if (String(jpeg_size) == "2592x1944") {
    jpeg_size_id = 6;
   }
-    
-    temp=SPI.transfer(0x00);
+  
+  Serial.println(">>>camera_mosfet:"+String(camera_mosfet)+" compare to 0:"+String((strcmp(camera_mosfet,"0")==0)));
+  if (strcmp(camera_mosfet,"0")==0) {
+    Serial.println(">>>camera_mosfet is 0: starting OV5642 on setup()");
+    //Check if the ArduCAM SPI bus is OK
+    myCAM.write_reg(ARDUCHIP_TEST1, 0x55);
+    temp = myCAM.read_reg(ARDUCHIP_TEST1);
+    if (temp != 0x55) {
+      printMessage("ERR SPI: Check");
+      printMessage("ArduCam wiring");
+      delay(10000);
+      serverDeepSleep();
+    }
+
+    SPI.transfer(0x00);
     myCAM.clear_bit(6, GPIO_PWDN_MASK); //disable low power
     //Check if the camera module type is OV5642
     myCAM.wrSensorReg16_8(0xff, 0x01);
     myCAM.rdSensorReg16_8(12298, &vid);
     myCAM.rdSensorReg16_8(12299, &pid);
 
-   if((vid != 0x56) || (pid != 0x42)) {
-     printMessage("ERR conn OV5642");
-     
-   } else {
-     printMessage("CAMERA READY", true, true);
-     printMessage(IpAddress2String(WiFi.localIP()));
-     myCAM.set_format(JPEG);
-     myCAM.InitCAM();
-     // ARDUCHIP_TIM, VSYNC_LEVEL_MASK
-     myCAM.write_reg(3, 2);   //VSYNC is active HIGH
-     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-  }
-  
-  u8cursor = u8cursor+u8newline;
-  printMessage("Res: "+ String(jpeg_size));
+    if((vid != 0x56) || (pid != 0x42)) {
+      printMessage("ERR conn OV5642");
+      delay(10000);
+      serverDeepSleep();
+    } else {
+      myCAM.set_format(JPEG);
+      myCAM.InitCAM();
+      // ARDUCHIP_TIM, VSYNC_LEVEL_MASK
+      myCAM.write_reg(3, 2);   //VSYNC is active HIGH 
+    }
 
-  myCAM.clear_fifo_flag();
-  if (cameraMosfetReady) { cameraOff(); }
+  } else {
+    digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
+  }
+     printMessage("FS2 CAMERA READY", true, true);
+     u8cursor = u8cursor+u8newline;
+     printMessage("Res: "+ String(jpeg_size), true);
+     printMessage(IpAddress2String(WiFi.localIP()));
+
   // Set up mDNS responder:
   if (onlineMode) {  //TODO Check if this onlineMode thing makes sense
     if (!MDNS.begin(localDomain)) {
@@ -417,9 +425,6 @@ void setup() {
       }
     }
     MDNS.addService("http", "tcp", 80);
-    
-    u8cursor = u8cursor+u8newline;
-    printMessage("http://"+String(localDomain)+".local"); 
     
     // ROUTING
     defineServerRouting();
@@ -473,22 +478,27 @@ String camCapture(ArduCAM myCAM) {
   }
   // Read image data from Arducam mini and send away to internet
   static uint8_t buffer[bufferSize] = {0xFF};
+  _md5.begin();
   while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
       
       SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
+      _md5.add(buffer, will_copy);
       //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
       if (client.connected()) {
          client.write(&buffer[0], will_copy);
       }
-      if (fsFile && saveInSpiffs) {
+      if (fsFile) {
         fsFile.write(&buffer[0], will_copy);
       }
       len -= will_copy;
-      delay(1);
+      delay(0);
   }
 
-  if (fsFile && saveInSpiffs) {
+  _md5.calculate();
+  md5Hash = _md5.toString();
+  Serial.println(">> md5: "+md5Hash);
+  if (fsFile) {
     fsFile.close();
     memory.photoCount++;
     EEPROM_writeAnything(0, memory);
@@ -537,11 +547,8 @@ String camCapture(ArduCAM myCAM) {
 
 void serverCapture() {
   digitalWrite(ledStatus, HIGH);
-  if (cameraMosfetReady) { cameraInit(); }
-  // Set back the selected resolution
-  myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-  myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-  delay(5);
+  cameraInit();
+  
   start_capture();
   printMessage("CAPTURING", true, true);
   u8cursor = u8cursor+u8newline;
@@ -554,8 +561,7 @@ void serverCapture() {
   total_time = millis() - total_time;
   printMessage("Upload in "+String(total_time/1000)+ " s.");
   Serial.print("RENDER THUMB json bytes:"+String(response.length())+" ");
-  
-  if (cameraMosfetReady) { cameraOff(); }
+  cameraOff();
 
   DynamicJsonBuffer jsonBuffer;
   JsonObject& json = jsonBuffer.parseObject(response);
@@ -569,15 +575,14 @@ void serverCapture() {
   
   //json.printTo(Serial); // Only for debugging purpouses, may kill everything
   char imageUrl[300];
+  char hash[33];
   char thumbWidth[3];
   char thumbHeight[3];
   strcpy(imageUrl, json["url"]);
   strcpy(thumbWidth, json["thumb_width"]);
   strcpy(thumbHeight, json["thumb_height"]);
+  strcpy(hash, json["hash"]);
   JsonArray& arr = json["xbm"];
-  
-  Serial.print(" thumbWidth:"+String(thumbWidth));
-  Serial.print(" thumbHeight:"+String(thumbHeight));
   
   int c=0;
   const char* tempx;
@@ -598,9 +603,16 @@ void serverCapture() {
   u8g2.clearBuffer();
   u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
   u8g2.sendBuffer();
-
+  Serial.println("Capture HASH: " +md5Hash);
+  String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
+  if (md5Hash == hash) {
+      printMessage("UP. VERIFIED");
+      hashCheck = "<label style='color:green'>Image verified: "+md5Hash+"</label>";
+  } else {
+    printMessage("UP. CORRUPT");
+  }
   if (onlineMode) {
-    server.send(200, "text/html", "<div id='m'><small>"+String(imageUrl)+
+    server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
   }
 }
@@ -714,24 +726,41 @@ void serverDeepSleep() {
 }
 
 void cameraInit() {
-  digitalWrite(gpioCameraVcc, LOW);       // Power camera ON
-
-  // OV5642 Needs special settings otherwise will not wake up
+  if (strcmp(camera_mosfet,"0")==0) {
+    // Set back the selected resolution
+    myCAM.OV5642_set_JPEG_size(jpeg_size_id);
+    // Set Exposure many times does not work and will make a corrupt and big JPG
+    // myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+    delay(3);
+    Serial.println("___exposure: "+String(cameraSetExposure));
+    return;
+  }
+  digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
+  delay(100);
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
-  delay(3);
+  delay(50);
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
-  delay(50); 
+  int waitMs = 750+(80*cameraSetExposure);
+  Serial.println("cameraInit() waitMS: "+String(waitMs));
+  delay(waitMs);                       // 750 base
   myCAM.write_reg(3, 2);               // VSYNC is active HIGH
-  delay(47);
+  delay(3);
+  myCAM.OV5642_set_JPEG_size(jpeg_size_id);
+  myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+  // NOTE : In some OV5642 Models just doing a 200 Miliseconds total delay is enough
+  //        in other models, with doing in total about 800 Miliseconds wait after camera turns on
+  //        the picture will be black, or oversize, and not readable.
 }
 
 void cameraOff() {
+  if (strcmp(camera_mosfet,"0")==0) return;
   digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
+  Serial.println("cameraOff()");
 }
 
 void serverStream() {
-  if (cameraMosfetReady) { cameraInit(); }
+  cameraInit();
   delay(10);
   printMessage("STREAMING");
   myCAM.OV5642_set_JPEG_size(1);
@@ -808,7 +837,7 @@ void serverStream() {
       client.stop(); is_header = false; break;
     }
   }
-  if (cameraMosfetReady) { cameraOff(); }
+  cameraOff();
 }
 
 void loop() {

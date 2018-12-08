@@ -3,5 +3,6 @@
   "upload_host" : "your.upload.host",
   "upload_path" : "/your/upload/script/path/upload-xbm.php?f=2018",
   "slave_cam_ip": "",
-  "jpeg_size" : "1600x1200"
+  "jpeg_size" : "1600x1200",
+  "camera_mosfet" : 0
 }
