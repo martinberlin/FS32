@@ -606,7 +606,7 @@ void serverCapture() {
   Serial.println("Capture HASH: " +md5Hash);
   String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
   if (md5Hash == hash) {
-      printMessage("UP. VERIFIED");
+      printMessage("OK");
       hashCheck = "<label style='color:green'>Image verified: "+md5Hash+"</label>";
   } else {
     printMessage("UP. CORRUPT");
