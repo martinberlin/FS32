@@ -32,7 +32,8 @@
 #include <ArduinoJson.h>    // Any version > 5.13.3 gave me an error on swap function
 #include <WebServer.h>
 #include <U8g2lib.h>        // OLED display I2C Settings are for Heltec board, change it to suit yours:
-
+#include <MD5Builder.h>
+MD5Builder _md5;
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 
 // CAMERA CONFIGURATION
@@ -41,7 +42,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = false;                     // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = true;                     // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
@@ -124,7 +125,7 @@ void defineServerRouting() {
     server.onNotFound(handleWebServerRoot);
     server.begin();
 }
-
+String md5Hash;
 // Default image (LOGO?)
 static unsigned char image[] U8X8_PROGMEM  = {
   0x00, 0xC0, 0xFF, 0xFF, 0xFF, 0x0F, 0x00, 0x00, 0xFE, 0xFF, 0xFF, 0x17, 
@@ -477,22 +478,27 @@ String camCapture(ArduCAM myCAM) {
   }
   // Read image data from Arducam mini and send away to internet
   static uint8_t buffer[bufferSize] = {0xFF};
+  _md5.begin();
   while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
       
       SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
+      _md5.add(buffer, will_copy);
       //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
       if (client.connected()) {
          client.write(&buffer[0], will_copy);
       }
-      if (fsFile && saveInSpiffs) {
+      if (fsFile) {
         fsFile.write(&buffer[0], will_copy);
       }
       len -= will_copy;
-      delay(1);
+      delay(0);
   }
 
-  if (fsFile && saveInSpiffs) {
+  _md5.calculate();
+  md5Hash = _md5.toString();
+  Serial.println(">> md5: "+md5Hash);
+  if (fsFile) {
     fsFile.close();
     memory.photoCount++;
     EEPROM_writeAnything(0, memory);
@@ -569,15 +575,14 @@ void serverCapture() {
   
   //json.printTo(Serial); // Only for debugging purpouses, may kill everything
   char imageUrl[300];
+  char hash[33];
   char thumbWidth[3];
   char thumbHeight[3];
   strcpy(imageUrl, json["url"]);
   strcpy(thumbWidth, json["thumb_width"]);
   strcpy(thumbHeight, json["thumb_height"]);
+  strcpy(hash, json["hash"]);
   JsonArray& arr = json["xbm"];
-  
-  Serial.print(" thumbWidth:"+String(thumbWidth));
-  Serial.print(" thumbHeight:"+String(thumbHeight));
   
   int c=0;
   const char* tempx;
@@ -598,9 +603,16 @@ void serverCapture() {
   u8g2.clearBuffer();
   u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
   u8g2.sendBuffer();
-
+  Serial.println("Capture HASH: " +md5Hash);
+  String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
+  if (md5Hash == hash) {
+      printMessage("UP. VERIFIED");
+      hashCheck = "<label style='color:green'>Image verified: "+md5Hash+"</label>";
+  } else {
+    printMessage("UP. CORRUPT");
+  }
   if (onlineMode) {
-    server.send(200, "text/html", "<div id='m'><small>"+String(imageUrl)+
+    server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
   }
 }
