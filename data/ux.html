@@ -71,24 +71,18 @@
                 </div>
             </form>
 
-            <iframe name='frame' width='100%' height='400' frameborder="0"></iframe>
+            <iframe name='frame' width='100%' height='440' frameborder="0"></iframe>
+          
             <div class='row'>
                 <div class='col-md-6'>
-                    <button onclick="frame.location='/wifi/reset'"
-                            class="btn btn-sm btn-danger"
-                            title="Creates the CAM accesspoint so you can set up a new WiFi connection">Reset WiFi Credentials</button>
-                </div>
-                <div class='col-md-6 text-right'>
-                    <button onclick="frame.location='/camera/settings'"
-                            class="btn btn-sm btn-default form-control"
-                            title="This option does not change WiFi settings but let's you edit Camera setup">Restart to edit CAM config</button>
-                </div>
-            </div>
-            <div class='row'>
-                <div class='col-md-12 text-right'>
                     <button onclick="frame.location='/deepsleep'"
                             class="btn btn-sm btn-black"
                             title="Sends the camera to deep sleep mode">Deep sleep mode</button>
+                </div>
+                <div class='col-md-6 text-right'>
+                    <button onclick="frame.location='/camera/settings'"
+                            class="btn btn-sm btn-warning"
+                            title="Connect to CAM-autoconnect and select SETUP option">Camera settings</button>
                 </div>
             </div>
         </div>

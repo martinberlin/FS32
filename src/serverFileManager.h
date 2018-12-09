@@ -28,7 +28,7 @@ void serverListFiles() {
   
   String fileName = "/template.html";
   webTemplate = "";
-  printMessage("Listing files");
+  printMessage("Listing files", true);
   
   if (SPIFFS.exists(fileName)) {
     File file = SPIFFS.open(fileName, "r");
@@ -83,7 +83,7 @@ void serverListFiles() {
       }
       body += "</td>";
       body += "</tr>";
-      printMessage(fileName+ " "+ String(fileSize)+fileUnit);
+      //printMessage(fileName+ " "+ String(fileSize)+fileUnit);
       file = root.openNextFile();
   }
     

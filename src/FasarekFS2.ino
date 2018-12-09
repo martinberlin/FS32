@@ -42,7 +42,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = true;                     // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = false;                     // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
@@ -280,12 +280,12 @@ void setup() {
   WiFiManagerParameter param_camera_mosfet("camera_mosfet", "Camera on only when taking photo (1)", camera_mosfet, 1);
   WiFiManagerParameter param_jpeg_size("jpeg_size", "Select JPG Size: 640x480 1024x768 1280x1024 1600x1200 (2 & 5mp) / 2048x1536 2592x1944 (only 5mp)", jpeg_size, 10);
  
- if (onlineMode) {
+ //if (onlineMode) {
   //printMessage("> Camera is on ONLINE Mode");
   // This is triggered on next restart after click in RESET WIFI AND EDIT CONFIGURATION
-  if (memory.resetWifiSettings) {
+  /* if (memory.resetWifiSettings) {
     wm.resetSettings();
-  }
+  } */
   wm.setMenu(menu);
   // Add the defined parameters to wm
   wm.addParameter(&custom_html);
@@ -311,9 +311,9 @@ void setup() {
   } else {
     wm.autoConnect(configModeAP);
   }
- } else {
+ /* } else {
    printMessage("OFFLINE Mode");
- }
+ } */
 
   // Read updated parameters
   strcpy(timelapse, param_timelapse.getValue());
@@ -477,17 +477,28 @@ String camCapture(ArduCAM myCAM) {
     String filename = String(memory.photoCount)+".jpg";
      if (SPIFFS.exists("/"+filename)) {
         SPIFFS.remove("/"+filename);
+        delay(1);
      }
     printMessage("Saving: "+filename);
     fsFile = SPIFFS.open("/"+filename, "w");
   }
-  // Read image data from Arducam mini and send away to internet
+  // Read image data from Arducam
   static uint8_t buffer[bufferSize] = {0xFF};
   _md5.begin();
+  //bool isHeader = true;
+  int loops = 1;
   while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
       
       SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
+
+      // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
+      if ((loops == 1) && (buffer[0] != 255) && (buffer[1] = 216)) {
+        client.stop();
+        printMessage("JPEG corrupt", true);
+        printMessage("Abort transfer", true);
+        return "JPEG headers corrupt";
+      }
       _md5.add(buffer, will_copy);
       //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
       if (client.connected()) {
@@ -498,8 +509,9 @@ String camCapture(ArduCAM myCAM) {
       }
       len -= will_copy;
       delay(1);
+      loops++;
   }
-
+  //Serial.println("Total loops: "+String(loops) +" bufferSize: "+String(bufferSize));
   _md5.calculate();
   camHash = _md5.toString();
   if (fsFile) {
@@ -507,7 +519,6 @@ String camCapture(ArduCAM myCAM) {
     memory.photoCount++;
     EEPROM_writeAnything(0, memory);
   }
-
   client.println(end_request);
   myCAM.CS_HIGH(); 
 
@@ -519,8 +530,8 @@ String camCapture(ArduCAM myCAM) {
     int timeout = millis() + 5000;
   while (client.available() == 0) {
     if (timeout - millis() < 0) {
-      message = "> Client Timeout waiting for reply after sending JPG (5 sec. timeout reached)";
-      printMessage("Client timeout");
+      message = "Client timeout";
+      printMessage(message);
       client.stop();
       return message;
     }
@@ -611,14 +622,16 @@ void serverCapture() {
   String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
   char camHashChar[33];
   camHash.toCharArray(camHashChar,33);
-  Serial.println("cam HASH: " +camHash);
+  //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Make comparison fail
+  
+  Serial.println("cam HASH: " +String(camHashChar));
   Serial.println("api HASH: " +String(hash));
   
   if (strcmp(camHashChar, hash) == 0) {
       printMessage("OK");
       hashCheck = "<label style='color:green'>Image verified: "+camHash+"</label>";
   } else {
-    printMessage("UP. CORRUPT");
+    printMessage("UP. CORRUPT"); // Repeat upload automatically
   }
   if (onlineMode) {
     server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
