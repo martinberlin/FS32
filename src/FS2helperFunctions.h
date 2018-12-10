@@ -66,11 +66,6 @@ void start_capture() {
   myCAM.start_capture();
 }
 
-void serverStopStream() {
-    printMessage("STREAM stopped", true, true);
-    server.send(200, "text/html", "<div id='m'>Streaming stoped</div>"+ javascriptFadeMessage);
-}
-
 /**
  * Update camera settings (Effects / Exposure only on OV5642)
  */

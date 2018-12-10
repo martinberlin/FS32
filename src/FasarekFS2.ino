@@ -353,9 +353,7 @@ void setup() {
   uint8_t vid, pid;
   uint8_t temp;
   // myCAM.write_reg uses Wire for I2C communication
-  //Wire.begin(SDA,SCL,100000); //sda 21 , scl 22, freq 100000
   Wire.begin();
-  // initialize SPI:
   SPI.begin();
   SPI.setFrequency(4000000); //4MHz
 
@@ -377,8 +375,6 @@ void setup() {
   if (String(jpeg_size) == "2592x1944") {
    jpeg_size_id = 6;
   }
-  
-  Serial.println(">>>camera_mosfet:"+String(camera_mosfet)+" compare to 0:"+String((strcmp(camera_mosfet,"0")==0)));
   if (strcmp(camera_mosfet,"0")==0) {
     Serial.println(">>>camera_mosfet is 0: starting OV5642 on setup()");
     //Check if the ArduCAM SPI bus is OK
@@ -485,8 +481,8 @@ String camCapture(ArduCAM myCAM) {
   // Read image data from Arducam
   static uint8_t buffer[bufferSize] = {0xFF};
   _md5.begin();
-  //bool isHeader = true;
   int loops = 1;
+
   while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
       
@@ -499,6 +495,7 @@ String camCapture(ArduCAM myCAM) {
         printMessage("Abort transfer", true);
         return "JPEG headers corrupt";
       }
+      delay(0);
       _md5.add(buffer, will_copy);
       //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
       if (client.connected()) {
@@ -508,12 +505,9 @@ String camCapture(ArduCAM myCAM) {
         fsFile.write(&buffer[0], will_copy);
       }
       len -= will_copy;
-      delay(1);
+      delay(0);
       loops++;
   }
-  //Serial.println("Total loops: "+String(loops) +" bufferSize: "+String(bufferSize));
-  _md5.calculate();
-  camHash = _md5.toString();
   if (fsFile) {
     fsFile.close();
     memory.photoCount++;
@@ -538,18 +532,17 @@ String camCapture(ArduCAM myCAM) {
   }
   while(client.available()) {
     rx_line = client.readStringUntil('\r');
-   
-    if (rx_line.length() <= 1) { // a blank line denotes end of headers
+    if (rx_line.length() <= 1) { 
         skip_headers = false;
       }
       // Collect http response
      if (!skip_headers) {
-            response += rx_line;
+        response += rx_line;
      }
   }
+  _md5.calculate();
+  camHash = _md5.toString(); // Used to compare hashes in serverCapture
   response.trim();
-  
-  //Serial.println( response );
   client.stop();
   return response;
   } else {
@@ -569,7 +562,7 @@ void serverCapture() {
   u8cursor = u8cursor+u8newline;
   int total_time = millis();
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
-   delay(1);
+   delay(0);
   } 
 
   String response = camCapture(myCAM);
@@ -583,7 +576,7 @@ void serverCapture() {
    
   if (!json.success()) {
     printMessage("JSON parse fail");
-    server.send(200, "text/html", "<div id='m'>JSON parse error. Debug:</div>"+response+ javascriptFadeMessage);
+    server.send(200, "text/html", "<div id='m'>JSON parse error. Debug:</div><br>"+response);
     delay(100);
     return;
   }
@@ -601,7 +594,6 @@ void serverCapture() {
   
   int c=0;
   const char* tempx;
-  // using C++11 syntax (preferred)
   for (auto value : arr) {
     // Assign the json array to xtemp
     tempx = value.as<char*>();
@@ -748,11 +740,11 @@ void serverDeepSleep() {
 }
 
 void cameraInit() {
-  if (strcmp(camera_mosfet,"0")==0) {
+  if (strcmp(camera_mosfet,"0") == 0) {
     // Set back the selected resolution
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
     // Set Exposure many times does not work and will make a corrupt and big JPG
-    // myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+    myCAM.OV5642_set_Exposure_level(cameraSetExposure);
     delay(3);
     Serial.println("___exposure: "+String(cameraSetExposure));
     return;
@@ -763,13 +755,15 @@ void cameraInit() {
   delay(50);
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
-  int waitMs = 750+(80*cameraSetExposure);
+  int waitMs = 1100+(10*cameraSetExposure);
   Serial.println("cameraInit() waitMS: "+String(waitMs));
   delay(waitMs);                       // 750 base
   myCAM.write_reg(3, 2);               // VSYNC is active HIGH
-  delay(3);
   myCAM.OV5642_set_JPEG_size(jpeg_size_id);
+  delay(6);
   myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+  delay(3);
+
   // NOTE : In some OV5642 Models just doing a 200 Miliseconds total delay is enough
   //        in other models, with doing in total about 800 Miliseconds wait after camera turns on
   //        the picture will be black, or oversize, and not readable.
@@ -781,9 +775,15 @@ void cameraOff() {
   Serial.println("cameraOff()");
 }
 
+void serverStopStream() {
+    printMessage("STREAM stopped", true, true);
+    cameraOff();
+    delay(3);
+    server.send(200, "text/html", "<div id='m'>Streaming stoped</div>"+ javascriptFadeMessage);
+}
+
 void serverStream() {
   cameraInit();
-  delay(10);
   printMessage("STREAMING");
   myCAM.OV5642_set_JPEG_size(1);
 
