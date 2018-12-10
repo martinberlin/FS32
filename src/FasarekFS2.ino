@@ -740,33 +740,30 @@ void serverDeepSleep() {
 }
 
 void cameraInit() {
-  if (strcmp(camera_mosfet,"0") == 0) {
+  Serial.println("cameraInit() _exposure: "+String(cameraSetExposure));
+  if (strcmp(camera_mosfet, "0") == 0) {
     // Set back the selected resolution
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
     // Set Exposure many times does not work and will make a corrupt and big JPG
     myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-    delay(3);
-    Serial.println("___exposure: "+String(cameraSetExposure));
+    delay(150);
     return;
   }
   digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
-  delay(100);
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
-  delay(50);
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
-  int waitMs = 1100+(10*cameraSetExposure);
+
+  int waitMs = 700;
   Serial.println("cameraInit() waitMS: "+String(waitMs));
   delay(waitMs);                       // 750 base
-  myCAM.write_reg(3, 2);               // VSYNC is active HIGH
+  myCAM.write_reg(3, VSYNC_LEVEL_MASK);// VSYNC is active HIGH
   myCAM.OV5642_set_JPEG_size(jpeg_size_id);
-  delay(6);
   myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-  delay(3);
-
+  delay(200); // Without wating some time here set exposure does nothing
   // NOTE : In some OV5642 Models just doing a 200 Miliseconds total delay is enough
-  //        in other models, with doing in total about 800 Miliseconds wait after camera turns on
-  //        the picture will be black, or oversize, and not readable.
+  //        in other models, with doing about 800 Miliseconds wait after camera turns on
+  //        the picture will be black, or oversized, and not readable.
 }
 
 void cameraOff() {
