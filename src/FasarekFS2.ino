@@ -39,10 +39,10 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
-const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
+const byte gpioCameraVcc = 2;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = false;                     // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = true;                     // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
@@ -52,7 +52,9 @@ const char* localDomain  = "cam";              // mDNS: cam.local
 #include "memorysaver.h"    // Uncomment the #define OV5642_MINI_5MP_PLUS
 // NOTE:     ArduCAM owners please also make sure to choose your camera module in the ../libraries/ArduCAM/memorysaver.h
 // INTERNAL GLOBALS
-
+// Touch configuration
+byte gpioTouch = 12;         // Here GPIO touch 
+bool touchEnabled = true;
 // Flag for saving data in config.json
 bool shouldSaveConfig = false;
 
@@ -232,7 +234,7 @@ void setup() {
   // Define outputs
   pinMode(CS, OUTPUT);
   pinMode(gpioCameraVcc, OUTPUT);
-  pinMode(ledStatus, OUTPUT);
+  //pinMode(ledStatus, OUTPUT);
   digitalWrite(gpioCameraVcc, LOW); // Turn camera ON
   // Read memory struct from EEPROM
   EEPROM_readAnything(0, memory);
@@ -554,14 +556,14 @@ String camCapture(ArduCAM myCAM) {
 }
 
 void serverCapture() {
-  digitalWrite(ledStatus, HIGH);
+  //digitalWrite(ledStatus, HIGH);
   cameraInit();
   
   start_capture();
   printMessage("CAPTURING", true, true);
   u8cursor = u8cursor+u8newline;
   int total_time = millis();
-  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
+ while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
    delay(0);
   } 
 
@@ -605,7 +607,7 @@ void serverCapture() {
   }
     Serial.println(" pixels loaded:"+String(c));
     
-  digitalWrite(ledStatus, LOW);
+  //digitalWrite(ledStatus, LOW);
   u8g2.setDrawColor(0);
   u8g2.clearBuffer();
   u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
@@ -652,7 +654,7 @@ void handleWebServerRoot() {
 }
 
 void configModeCallback(WiFiManager *myWiFiManager) {
-  digitalWrite(ledStatus, HIGH);
+  //digitalWrite(ledStatus, HIGH);
   message = "CAM can't get online. Entering config mode. Please connect to access point "+String(configModeAP);
   delay(500);
   printMessage("CAM offline",true,true);
@@ -863,5 +865,11 @@ void loop() {
    if (onlineMode) { 
     server.handleClient(); 
    }
-  buttonShutter.tick();
+ if (touchEnabled && (touchRead(gpioTouch) < 50)) {
+    //printMessage("TOUCH",true,true);
+    shutterReleased();
+  } 
+  if (!touchEnabled)  {
+    buttonShutter.tick();
+  }
 }
