@@ -27,9 +27,7 @@ bool isServerListable(char* filename) {
 void serverListFiles() {
   
   String fileName = "/template.html";
-  webTemplate = "";
-  printMessage("Listing files", true);
-  
+  webTemplate = "";  
   if (SPIFFS.exists(fileName)) {
     File file = SPIFFS.open(fileName, "r");
     while (file.available() != 0) {  
