@@ -440,7 +440,9 @@ String camCapture(ArduCAM myCAM) {
    // Check if available bytes in SPIFFS
   uint32_t bytesAvailableSpiffs = SPIFFS.totalBytes()-SPIFFS.usedBytes();
   uint32_t len  = myCAM.read_fifo_length();
-  char *progressBarMessage = "Uploading";
+  // Sent Kb in progressBar
+  char pb1 [11]; 
+
   if (len*2 > bytesAvailableSpiffs && saveInSpiffs) {
     memory.photoCount = 1;
     printMessage("Count reset 1");
@@ -466,7 +468,8 @@ String camCapture(ArduCAM myCAM) {
   "Content-Transfer-Encoding: binary\n\n";
    long length = len;
    long full_length = start_request.length() + len + end_request.length();
-   printMessage(String(full_length/1024)+ " Kb sent");
+   u8cursor = 40;
+   printMessage(String(full_length/1024)+ " Kb");
    printMessage(String(upload_host));
     client.println("POST "+String(upload_path)+" HTTP/1.1");
     client.println("Host: "+String(upload_host));
@@ -490,9 +493,8 @@ String camCapture(ArduCAM myCAM) {
 
   while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
-      
-      SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
-
+      // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
+      SPI.transfer(buffer, will_copy);
       // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
       if ((loops == 1) && (buffer[0] != 255) && (buffer[1] = 216)) {
         client.stop();
@@ -512,8 +514,12 @@ String camCapture(ArduCAM myCAM) {
       len -= will_copy;
       delay(0);
 
-      if (loops%10 == 0) {
-          progressBar(length-len, length, progressBarMessage);
+      if (loops%20 == 0) {
+        int kbSent = (length-len)/1024;
+        itoa(kbSent, pb1, 10);
+        char progressBarMessage[sizeof(pb1) + 1];
+        sprintf(progressBarMessage, "%s kb ", pb1);
+        progressBar(length-len, length, progressBarMessage);
       }
       loops++;
   }
@@ -567,7 +573,6 @@ void serverCapture() {
   cameraInit();
   
   start_capture();
-  //printMessage("CAPTURING", true, true);
   u8g2.clearBuffer();
   int total_time = millis();
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
@@ -619,7 +624,7 @@ void serverCapture() {
     Serial.println(" pixels loaded:"+String(c));
     
   digitalWrite(ledStatus, LOW);
-  u8g2.setDrawColor(0);
+  //u8g2.setDrawColor(0);
   u8g2.clearBuffer();
   u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
   u8g2.sendBuffer();
