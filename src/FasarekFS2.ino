@@ -81,7 +81,7 @@ bool is_header = false;
 
 // Fixed to a OV5642
 ArduCAM myCAM(3, CS);
-byte camJpegQuality = 1; // 0 high . 1 default . 2 low
+byte camJpegQuality = 2; // 0 high . 1 default . 2 low -> JPG compression
 WiFiManager wm;
 WiFiClient client;
 WebServer server(80);
@@ -442,9 +442,8 @@ String camCapture(ArduCAM myCAM) {
    // Check if available bytes in SPIFFS
   uint32_t bytesAvailableSpiffs = SPIFFS.totalBytes()-SPIFFS.usedBytes();
   uint32_t len  = myCAM.read_fifo_length();
-  // Processed / total Kb in progressBar
+  // Processed Kb in progressBar
   char pb1 [6];
-  char pb2 [6];
   if (len*2 > bytesAvailableSpiffs && saveInSpiffs) {
     memory.photoCount = 1;
     printMessage("Count reset 1");
@@ -517,11 +516,9 @@ String camCapture(ArduCAM myCAM) {
       delay(0);
 
       if (loops%10 == 0) {
-        itoa (round(length-len/1024), pb1, 6);
-        itoa (round(length/1024), pb2, 6);
-        char progressBarMessage[sizeof(pb1) + sizeof(pb2) + 1];
-        sprintf(progressBarMessage, "%s / %s Kb", pb1, pb2);
-   
+        itoa (length-len/1024, pb1, 5);
+        char progressBarMessage[sizeof(pb1) + 1];
+        sprintf(progressBarMessage, "%s Kb  ", pb1);
         progressBar(length-len, length, progressBarMessage);
       }
       loops++;
@@ -577,6 +574,7 @@ void serverCapture() {
   
   start_capture();
   //printMessage("CAPTURING", true, true);
+  u8g2.setDrawColor(1);
   u8g2.clearBuffer();
   int total_time = millis();
 
