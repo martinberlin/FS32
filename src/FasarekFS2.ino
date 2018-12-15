@@ -42,7 +42,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 const byte gpioCameraVcc = 2;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = true;                     // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = false;                     // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
@@ -442,7 +442,9 @@ String camCapture(ArduCAM myCAM) {
    // Check if available bytes in SPIFFS
   uint32_t bytesAvailableSpiffs = SPIFFS.totalBytes()-SPIFFS.usedBytes();
   uint32_t len  = myCAM.read_fifo_length();
-  char *progressBarMessage = "Uploading";
+  // Processed / total Kb in progressBar
+  char pb1 [6];
+  char pb2 [6];
   if (len*2 > bytesAvailableSpiffs && saveInSpiffs) {
     memory.photoCount = 1;
     printMessage("Count reset 1");
@@ -515,7 +517,12 @@ String camCapture(ArduCAM myCAM) {
       delay(0);
 
       if (loops%10 == 0) {
-          progressBar(length-len, length, progressBarMessage);
+        itoa (round(length-len/1024), pb1, 6);
+        itoa (round(length/1024), pb2, 6);
+        char progressBarMessage[sizeof(pb1) + sizeof(pb2) + 1];
+        sprintf(progressBarMessage, "%s / %s Kb", pb1, pb2);
+   
+        progressBar(length-len, length, progressBarMessage);
       }
       loops++;
   }
