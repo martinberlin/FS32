@@ -35,7 +35,7 @@
 #include <MD5Builder.h>
 MD5Builder _md5;
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
-
+String version = "1.0";
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
@@ -416,7 +416,7 @@ void setup() {
   } else {
     digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
   }
-     printMessage("FS2 CAMERA READY", true, true);
+     printMessage("FS2 READY v"+version, true, true);
      u8cursor = u8cursor+u8newline;
      printMessage("Res: "+ String(jpeg_size), true);
      printMessage(IpAddress2String(WiFi.localIP()));
