@@ -79,6 +79,7 @@ bool is_header = false;
 
 // Fixed to a OV5642
 ArduCAM myCAM(3, CS);
+byte camJpegQuality = 1; // 0 high . 1 default . 2 low
 WiFiManager wm;
 WiFiClient client;
 WebServer server(80);
@@ -302,8 +303,10 @@ void setup() {
   wm.setSaveConfigCallback(saveConfigCallback);
   wm.setAPCallback(configModeCallback);
   wm.setDebugOutput(false);
+  wm.autoConnect(configModeAP);
   // If saveParamCallback is called then on next restart trigger config portal to update camera params
-  if (memory.editSetup) {
+ 
+ if (memory.editSetup) {
     // Let's do this just one time: Restarting again should connect to previous WiFi
     memory.editSetup = false;
     EEPROM_writeAnything(0, memory);
@@ -375,7 +378,9 @@ void setup() {
   if (String(jpeg_size) == "2592x1944") {
    jpeg_size_id = 6;
   }
-  if (strcmp(camera_mosfet,"0")==0) {
+  // camera_mosfet on 0 means Camera stays on all the time
+  if (strcmp(camera_mosfet,"0") == 0) {
+    printMessage("M0: Check SPI");
     Serial.println(">>>camera_mosfet is 0: starting OV5642 on setup()");
     //Check if the ArduCAM SPI bus is OK
     myCAM.write_reg(ARDUCHIP_TEST1, 0x55);
@@ -400,6 +405,7 @@ void setup() {
       serverDeepSleep();
     } else {
       myCAM.set_format(JPEG);
+      myCAM.OV5642_set_Compress_quality(camJpegQuality);
       myCAM.InitCAM();
       // ARDUCHIP_TIM, VSYNC_LEVEL_MASK
       myCAM.write_reg(3, 2);   //VSYNC is active HIGH 
@@ -434,12 +440,11 @@ String camCapture(ArduCAM myCAM) {
    // Check if available bytes in SPIFFS
   uint32_t bytesAvailableSpiffs = SPIFFS.totalBytes()-SPIFFS.usedBytes();
   uint32_t len  = myCAM.read_fifo_length();
-
+  char *progressBarMessage = "Uploading";
   if (len*2 > bytesAvailableSpiffs && saveInSpiffs) {
     memory.photoCount = 1;
     printMessage("Count reset 1");
   }
-  long full_length;
   
   if (len == 0) {
     message = "ERR read memory";
@@ -459,8 +464,8 @@ String camCapture(ArduCAM myCAM) {
   "\n--"+boundary+"\n" + 
   "Content-Disposition: form-data; name=\"upload\"; filename=\"CAM.JPG\"\n" + 
   "Content-Transfer-Encoding: binary\n\n";
-  
-   full_length = start_request.length() + len + end_request.length();
+   long length = len;
+   long full_length = start_request.length() + len + end_request.length();
    printMessage(String(full_length/1024)+ " Kb sent");
    printMessage(String(upload_host));
     client.println("POST "+String(upload_path)+" HTTP/1.1");
@@ -506,6 +511,10 @@ String camCapture(ArduCAM myCAM) {
       }
       len -= will_copy;
       delay(0);
+
+      if (loops%10 == 0) {
+          progressBar(length-len, length, progressBarMessage);
+      }
       loops++;
   }
   if (fsFile) {
@@ -558,13 +567,17 @@ void serverCapture() {
   cameraInit();
   
   start_capture();
-  printMessage("CAPTURING", true, true);
-  u8cursor = u8cursor+u8newline;
+  //printMessage("CAPTURING", true, true);
+  u8g2.clearBuffer();
   int total_time = millis();
-  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
-   delay(0);
+  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
+    delay(0);
+  }
+  /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
+  if (onlineMode) {
+    shutterPing();
   } 
-
+  */
   String response = camCapture(myCAM);
   total_time = millis() - total_time;
   printMessage("Upload in "+String(total_time/1000)+ " s.");
@@ -620,7 +633,6 @@ void serverCapture() {
   Serial.println("api HASH: " +String(hash));
   
   if (strcmp(camHashChar, hash) == 0) {
-      printMessage("OK");
       hashCheck = "<label style='color:green'>Image verified: "+camHash+"</label>";
   } else {
     printMessage("UP. CORRUPT"); // Repeat upload automatically
@@ -760,6 +772,7 @@ void cameraInit() {
   myCAM.write_reg(3, VSYNC_LEVEL_MASK);// VSYNC is active HIGH
   myCAM.OV5642_set_JPEG_size(jpeg_size_id);
   myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+  myCAM.OV5642_set_Compress_quality(camJpegQuality); // JPEG Compression quality
   delay(200); // Without wating some time here set exposure does nothing
   // NOTE : In some OV5642 Models just doing a 200 Miliseconds total delay is enough
   //        in other models, with doing about 800 Miliseconds wait after camera turns on
