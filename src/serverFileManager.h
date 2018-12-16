@@ -125,7 +125,6 @@ void serverDeleteFile() {
       String filename = server.arg(0);
       if(isServerDeleteable(filename)) {
          SPIFFS.remove("/"+filename);
-         printMessage("> Deleting "+ filename);
       }
       server.sendHeader("Location", "/fs/list", true);
       server.send (302, "text/plain", "");

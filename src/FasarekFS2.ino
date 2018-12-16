@@ -42,7 +42,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = false;                      // Whether to save the jpg also in SPIFFS
+bool saveInSpiffs = true;                      // Whether to save the jpg also in SPIFFS
 // CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
 
 // AP to Setup WiFi & Camera settings
@@ -303,10 +303,10 @@ void setup() {
   wm.setSaveConfigCallback(saveConfigCallback);
   wm.setAPCallback(configModeCallback);
   wm.setDebugOutput(false);
-  wm.autoConnect(configModeAP);
+  //wm.autoConnect(configModeAP);
   // If saveParamCallback is called then on next restart trigger config portal to update camera params
  
- if (memory.editSetup) {
+  if (memory.editSetup) {
     // Let's do this just one time: Restarting again should connect to previous WiFi
     memory.editSetup = false;
     EEPROM_writeAnything(0, memory);
@@ -314,9 +314,6 @@ void setup() {
   } else {
     wm.autoConnect(configModeAP);
   }
- /* } else {
-   printMessage("OFFLINE Mode");
- } */
 
   // Read updated parameters
   strcpy(timelapse, param_timelapse.getValue());
@@ -437,8 +434,6 @@ void setup() {
   }
 
 String camCapture(ArduCAM myCAM) {
-   // Check if available bytes in SPIFFS
-  uint32_t bytesAvailableSpiffs = SPIFFS.totalBytes()-SPIFFS.usedBytes();
   uint32_t len  = myCAM.read_fifo_length();
   uint32_t length = len;
   char pb1 [11];  // Sent Kb in progressBar
@@ -448,7 +443,9 @@ String camCapture(ArduCAM myCAM) {
     printMessage(message);
     return message;
   }
-   start_request = start_request + 
+  static uint8_t buffer[bufferSize] = {0xFF};
+  long copied = 0; //DEBUG
+  start_request = start_request + 
     "\n--"+boundary+"\n" + 
     "Content-Disposition: form-data; name=\"upload\"; filename=\"CAM.JPG\"\n" + 
     "Content-Transfer-Encoding: binary\n\n";
@@ -458,19 +455,21 @@ String camCapture(ArduCAM myCAM) {
   int loops = 1;
   myCAM.CS_LOW();
   myCAM.set_fifo_burst();
-    // If we catch any WiFi exception
+  
   if (saveInSpiffs) {
+    uint32_t bytesAvailableSpiffs = SPIFFS.totalBytes()-SPIFFS.usedBytes();
     if (len*2 > bytesAvailableSpiffs) {
       memory.photoCount = 1;
       printMessage("Count reset 1");
     }
-    loops = 0;
+    loops = 1;
     len = length;
     String filename = String(memory.photoCount)+".jpg";
      if (SPIFFS.exists("/"+filename)) {
         SPIFFS.remove("/"+filename);
         delay(1);
      }
+    u8cursor = 40;
     printMessage("FS: "+filename);
     fsFile = SPIFFS.open("/"+filename, "w");
     while (len) {
@@ -489,81 +488,142 @@ String camCapture(ArduCAM myCAM) {
       }
       loops++;
     }
+   // WiFi upload reading image from SPIFFS
    if (fsFile) {
      fsFile.close();
-     memory.photoCount++;
-     EEPROM_writeAnything(0, memory);
-    }
-  }  else {
-    // Pure WiFi upload, no SPIFFS
-    if (client.connect(upload_host, 80) || onlineMode) { 
-      if (onlineMode) {
-        while(client.available()) {
-          String line = client.readStringUntil('\r');
-        }  // Empty wifi receive bufffer
-      }
-  
-    u8cursor = 40;
-    printMessage(String(full_length/1024)+ " Kb jpeg");
-    //printMessage(String(upload_host));
+     fsFile = SPIFFS.open("/"+filename, "r"); 
+    //fsFile.seek(0);
+    memory.photoCount++;
+    EEPROM_writeAnything(0, memory);
+
+    if (client.connect(upload_host, 80) && onlineMode) { 
+      while(client.available()) {
+        String line = client.readStringUntil('\r');
+      } 
+      u8cursor = 40;
+      printMessage(String(full_length/1024)+ " Kb jpeg");
       client.println("POST "+String(upload_path)+" HTTP/1.1");
       client.println("Host: "+String(upload_host));
       client.println("Content-Type: multipart/form-data; boundary="+boundary);
       client.print("Content-Length: "); client.println(full_length);
       client.println();
       client.print(start_request);
-
-    // Read image data from Arducam
-    static uint8_t buffer[bufferSize] = {0xFF};
     _md5.begin();
     loops = 1;
+    len = length;
+    static uint8_t bufferW[bufferSize] = {0xFF};
 
     while (len) {
         size_t will_copy = (len < bufferSize) ? len : bufferSize;
-        // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
-        SPI.transfer(buffer, will_copy);
-        // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
-        if ((loops == 1) && (buffer[0] != 255) && (buffer[1] = 216)) {
+        fsFile.read(bufferW, will_copy);
+
+        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] = 216)) {
+          //Serial.println("b0: "+String(bufferW[0]));
+          //Serial.println("b1: "+String(bufferW[1]));
           client.stop();
           printMessage("JPEG corrupt", true);
-          printMessage("Abort transfer", true);
-          return "JPEG headers corrupt";
+          return "JPEG headers corrupt on WiFi upload after Spiffs";
         }
-        delay(0);
-        _md5.add(buffer, will_copy);
-        //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
+        _md5.add(bufferW, will_copy);
         if (client.connected()) {
-          client.write(&buffer[0], will_copy);
+            client.write(bufferW, will_copy); //&buffer[0]
         }
         len -= will_copy;
         delay(0);
-
         if (loops%20 == 0) {
           int kbSent = (length-len)/1024;
           itoa(kbSent, pb1, 10);
           char progressBarMessage[sizeof(pb1) + 1];
-          sprintf(progressBarMessage, "%s kb ", pb1);
+          sprintf(progressBarMessage, "%s kb WiFi  ", pb1);
           progressBar(length-len, length, progressBarMessage);
         }
+        //copied = copied+will_copy;
+        loops++;
+        
+    }
+    client.println(end_request);
+
+    fsFile.close();
+    //Serial.println("copied:"+String(copied));
+    //Serial.println("total:"+String(length));
+    
+
+    } else {
+      message = "ERROR: WiFi after Spiffs "+String(upload_host);
+      printMessage("Conn failed to");
+      printMessage(String(upload_host));
+      return message;
+    }
+   } // WiFi upload after spiffs
+
+
+  }  else {
+
+      // Pure WiFi upload, no SPIFFS
+      if (client.connect(upload_host, 80) && onlineMode) { 
+
+      while(client.available()) {
+        String line = client.readStringUntil('\r');
+      }  // Empty wifi receive bufffer
+      u8cursor = 40;
+      printMessage(String(full_length/1024)+ " Kb jpeg");
+      //printMessage(String(upload_host));
+        client.println("POST "+String(upload_path)+" HTTP/1.1");
+        client.println("Host: "+String(upload_host));
+        client.println("Content-Type: multipart/form-data; boundary="+boundary);
+        client.print("Content-Length: "); client.println(full_length);
+        client.println();
+        client.print(start_request);
+      _md5.begin();
+      loops = 1;
+      
+      while (len) {
+          size_t will_copy = (len < bufferSize) ? len : bufferSize;
+          // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
+          SPI.transfer(buffer, will_copy);
+          // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
+          if ((loops == 1) && (buffer[0] != 255) && (buffer[1] = 216)) {
+            client.stop();
+            printMessage("JPEG corrupt", true);
+            printMessage("Abort transfer", true);
+            return "JPEG headers corrupt";
+          }
+          _md5.add(buffer, will_copy);
+          //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
+          if (client.connected()) {
+            client.write(buffer, will_copy); //&buffer[0]
+          }
+          len -= will_copy;
+          delay(0);
+
+          if (loops%20 == 0) {
+            int kbSent = (length-len)/1024;
+            itoa(kbSent, pb1, 10);
+            char progressBarMessage[sizeof(pb1) + 1];
+            sprintf(progressBarMessage, "%s kb WiFi", pb1);
+            progressBar(length-len, length, progressBarMessage);
+          }
+        copied = copied+will_copy;
         loops++;
     }
     client.println(end_request);
-      
-  } else {
-    message = "ERROR: Could not connect to "+String(upload_host);
-    printMessage("Conn failed to");
-    printMessage(String(upload_host));
-    return message;
+        
+    } else {
+      message = "ERROR: Could not connect to "+String(upload_host);
+      printMessage("Conn failed to");
+      printMessage(String(upload_host));
+      return message;
+    } // Only WiFi no spiffs
   }
-
-  myCAM.CS_HIGH(); 
+  Serial.println("myCAM.CS_HIGH()");
+  myCAM.CS_HIGH();
 
   bool   skip_headers = true;
   String rx_line;
   String response;
   
   // Read all the lines of the reply from server and print them to Serial
-    int timeout = millis() + 5000;
+  int timeout = millis() + 5000;
   while (client.available() == 0) {
     if (timeout - millis() < 0) {
       message = "Client timeout";
@@ -572,6 +632,7 @@ String camCapture(ArduCAM myCAM) {
       return message;
     }
   }
+  Serial.println("NO client timeout");
   while(client.available()) {
     rx_line = client.readStringUntil('\r');
     if (rx_line.length() <= 1) { 
@@ -586,8 +647,10 @@ String camCapture(ArduCAM myCAM) {
   camHash = _md5.toString(); // Used to compare hashes in serverCapture
   response.trim();
   client.stop();
+
+  Serial.println(camHash);
+  Serial.println(response);
   return response;
-  } 
 }
 
 void serverCapture() {
