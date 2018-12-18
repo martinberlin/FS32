@@ -41,9 +41,9 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
-byte  CS = 17;                                 // set GPIO17 as the slave select
-bool saveInSpiffs = true;                      // Whether to save the jpg also in SPIFFS
-// CONFIGURATION. NOTE! saveInSpiffs true makes everything slower in ESP32
+byte  CS = 17;                                // set GPIO17 as the slave select for Camera SPI
+bool spiffsFirst = true;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
+bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
@@ -61,7 +61,7 @@ OneButton buttonShutter(4, true, false);
 const int ledStatus = 12;
 
 // Makes a div id="m" containing response message to dissapear after 6 seconds
-String javascriptFadeMessage = "<script>setTimeout(function(){document.getElementById('m').innerHTML='';},6000);</script>";
+String javascriptFadeMessage = "<script>setTimeout(function(){document.getElementById('m').innerHTML='';},9000);</script>";
 String message;
 
 // Note if saving to SPIFFS bufferSize needs to be 256, otherwise won't save correctly
@@ -113,7 +113,7 @@ byte   cameraSetExposure;
 #include "serverFileManager.h"   // Responds to the FS Routes
 // ROUTING Definitions
 void defineServerRouting() {
-  if (saveInSpiffs) {
+  if (spiffsFirst) {
     server.on("/capture", HTTP_GET, serverCaptureSpiffsWifi);
   } else {
      server.on("/capture", HTTP_GET, serverCaptureWifi);
@@ -359,7 +359,6 @@ void setup() {
     json.printTo(Serial);
     json.printTo(configFile);
     configFile.close();
-    delay(1000);
   }
 
   // Button events
@@ -577,10 +576,8 @@ void serverCaptureWifi() {
   String response = "";
   response = camCaptureWifi(myCAM);
   
-  Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
-
+  //Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
   total_time = millis() - total_time;
-  //printMessage("Upload in "+String(total_time/1000)+ " s.");
   Serial.print("RENDER THUMB json bytes:"+String(response.length())+" ");
   cameraOff();
 
@@ -610,17 +607,11 @@ void serverCaptureWifi() {
     int c=0;
     const char* tempx;
     for (auto value : arr) {
-      // Assign the json array to xtemp
       tempx = value.as<char*>();
-    
       image[c] = strtol(tempx, NULL, 16);
-      // Preview first 10 lines for debugging
-      //if (c<10) { Serial.print("i:");Serial.print(image[c]);Serial.print(" "); }
       c++;      
     }
-      Serial.println(" pixels loaded:"+String(c));
-      
-    //digitalWrite(ledStatus, LOW);
+
     //u8g2.setDrawColor(0);
     u8g2.clearBuffer();
     u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
@@ -646,19 +637,19 @@ void serverCaptureWifi() {
 }
 
 void serverCaptureSpiffsWifi() {
+  int total_time = millis();
   cameraInit();
   
   start_capture();
   u8g2.clearBuffer();
-  int total_time = millis();
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
     delay(0);
   }
   String response = "";
-  Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" serverCaptureSpiffsWifi() start");
   uint32_t len  = myCAM.read_fifo_length();
   uint32_t length = len;
   char pb1 [11];  // Sent Kb in progressBar
+
   if (len == 0) {
     message = "ERR read memory";
     printMessage(message);
@@ -681,10 +672,9 @@ void serverCaptureSpiffsWifi() {
     String filename = String(memory.photoCount)+".jpg";
      if (SPIFFS.exists("/"+filename)) {
         SPIFFS.remove("/"+filename);
-        delay(1);
      }
-    u8cursor = 40;
-    printMessage("FS: "+filename);
+    u8cursor = 56;
+    printMessage("FS:"+filename+" "+(len/1024)+" Kb");
     fsFile = SPIFFS.open("/"+filename, "w");
     while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
@@ -703,20 +693,18 @@ void serverCaptureSpiffsWifi() {
       loops++;
     }
     myCAM.CS_HIGH();
+
   // WiFi upload reading image from SPIFFS
    fsFile.close();   
-   Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" FS done next: WiFI upload");
    len = length;
-   File fsFileRead;
-   fsFileRead = SPIFFS.open("/"+filename, "r"); // seek 0 does not work as expected
-   //fsFile.seek(0, SeekSet); // offset/ mode :  Put pointer at beginning of the file
+  
+   fsFile = SPIFFS.open("/"+filename, "r"); // seek 0 does not work as expected: fsFile.seek(0, SeekSet); 
 
     if (client.connect(upload_host, 80)) { 
       while(client.available()) {
         String line = client.readStringUntil('\r');
       } 
-      u8cursor = 40;
-      printMessage(String(len/1024)+ " Kb jpeg   ");
+      u8g2.clearBuffer();
       client.println("POST "+String(upload_path)+" HTTP/1.1");
       client.println("Host: "+String(upload_host));
       client.println("Content-Type: multipart/form-data; boundary="+boundary);
@@ -726,37 +714,32 @@ void serverCaptureSpiffsWifi() {
     
     _md5.begin();
     int loops = 1;
-    
+    u8cursor = 56;
+    printMessage("Upload "+String(len/1024)+ " Kb");
     static uint8_t bufferW[bufferSize] = {0xFF};
     while (len) {
         size_t will_copy = (len < bufferSize) ? len : bufferSize;
-        fsFileRead.read(bufferW, will_copy);
+        fsFile.read(bufferW, will_copy);
         if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] = 216)) {
-          //Serial.println("b0: "+String(bufferW[0]));
-          //Serial.println("b1: "+String(bufferW[1]));
           client.stop();
           printMessage("JPEG corrupt", true);
         }
         _md5.add(bufferW, will_copy);
         if (client.connected()) {
-            client.write(bufferW, will_copy); //&buffer[0]
+            client.write(bufferW, will_copy);
         }
-        len -= will_copy;
-        delay(0);
-        if (loops%5 == 0) {
+        len -= will_copy;      
+        if (loops%10 == 0) {
           int kbSent = (length-len)/1024;
           itoa(kbSent, pb1, 10);
           char progressBarMessage[sizeof(pb1) + 1];
-          sprintf(progressBarMessage, "%s kb WiFi  ", pb1);
-          u8g2.drawStr(0, 18, progressBarMessage);
-          Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" loops:"+String(loops));
-          delay(10);
+          sprintf(progressBarMessage, "%s kb WiFi", pb1);
+          progressBar(length-len, length, progressBarMessage);
         }
         loops++;
     }
     client.println(end_request);
-
-    fsFileRead.close();
+    fsFile.close();
     
     } else {
       message = "ERROR: WiFi after Spiffs "+String(upload_host);
@@ -791,19 +774,13 @@ void serverCaptureSpiffsWifi() {
      delay(0);
   }
   client.stop();
-  delay(10);
   _md5.calculate();
-  _md5.getChars(camHash); // Used to compare hashes in serverCapture
+  _md5.getChars(camHash);
   response.trim();
-
+  // Add 1 to the photo number
   memory.photoCount++;
   EEPROM_writeAnything(0, memory);
-  Serial.println(response);Serial.println(camHash);
-  Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" wifiUploadFromSpiff DONE"); 
-
-  total_time = millis() - total_time;
-  //printMessage("Upload in "+String(total_time/1000)+ " s.");
-  Serial.print("RENDER THUMB json bytes:"+String(response.length())+" ");
+  //Serial.println(response);Serial.println(camHash);
   cameraOff();
 
   DynamicJsonBuffer jsonBuffer;
@@ -832,33 +809,31 @@ void serverCaptureSpiffsWifi() {
     int c=0;
     const char* tempx;
     for (auto value : arr) {
-      // Assign the json array to xtemp
       tempx = value.as<char*>();
-    
       image[c] = strtol(tempx, NULL, 16);
-      // Preview first 10 lines for debugging
-      //if (c<10) { Serial.print("i:");Serial.print(image[c]);Serial.print(" "); }
       c++;      
     }
-      Serial.println(" pixels loaded:"+String(c));
-      
-    //digitalWrite(ledStatus, LOW);
-    //u8g2.setDrawColor(0);
+    // Draw thumbnail coming from json
     u8g2.clearBuffer();
-    u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
+    u8g2.drawXBM(0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
+    u8cursor = 56;
+    int secs = (millis() - total_time)/1000;
+    printMessage(String(secs)+ " s.");
     u8g2.sendBuffer();
   }
-  String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
-
+  
   //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Make comparison fail
-  
-  Serial.println("cam HASH: " +String(camHash));
-  Serial.println("api HASH: " +String(hash));
-  
+  //Serial.println("cam HASH: " +String(camHash));Serial.println("api HASH: " +String(hash));
+  String hashCheck;
   if (strcmp(camHash, hash) == 0) {
-      hashCheck = "<label style='color:green'>Image verified: "+String(camHash)+"</label>";
+      hashCheck = "<label style='color:green'>Image verified: "+String(camHash)+"</label><br>";
+      if (SpiffsDeleteAfterWifi) {
+          SPIFFS.remove("/"+filename);
+          hashCheck += "Image "+filename+" deleted from file system";
+      }
   } else {
-    printMessage("UP. CORRUPT"); // Repeat upload automatically
+    printMessage("UP. CORRUPT"); // Repeat upload automatically? Not for now
+    hashCheck = "<label style='color:red'>Image upload failed: "+String(camHash)+"</label><br>Please check image in File Manager";
   }
   
   if (onlineMode) {
@@ -955,7 +930,7 @@ void serverCameraParams() {
 
 // Button events
 void shutterReleased() {
-  if (saveInSpiffs) {
+  if (spiffsFirst) {
     serverCaptureSpiffsWifi();
   } else {
     serverCaptureWifi();
