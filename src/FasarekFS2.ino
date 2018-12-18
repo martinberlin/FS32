@@ -692,12 +692,15 @@ void serverCaptureSpiffsWifi() {
       }
       loops++;
     }
-    myCAM.CS_HIGH();
+   // No need since we turn camera off: myCAM.CS_HIGH();
+  cameraOff();
 
   // WiFi upload reading image from SPIFFS
    fsFile.close();   
    len = length;
-  
+  // Add 1 to the photo number for next photo
+   memory.photoCount++;
+   EEPROM_writeAnything(0, memory);
    fsFile = SPIFFS.open("/"+filename, "r"); // seek 0 does not work as expected: fsFile.seek(0, SeekSet); 
 
     if (client.connect(upload_host, 80)) { 
@@ -777,12 +780,7 @@ void serverCaptureSpiffsWifi() {
   _md5.calculate();
   _md5.getChars(camHash);
   response.trim();
-  // Add 1 to the photo number
-  memory.photoCount++;
-  EEPROM_writeAnything(0, memory);
   //Serial.println(response);Serial.println(camHash);
-  cameraOff();
-
   DynamicJsonBuffer jsonBuffer;
   JsonObject& json = jsonBuffer.parseObject(response);
    
@@ -814,6 +812,7 @@ void serverCaptureSpiffsWifi() {
       c++;      
     }
     // Draw thumbnail coming from json
+    // TODO: Optimize JSON to return a smaller array of 0,1 pixels instead of "0xFF"
     u8g2.clearBuffer();
     u8g2.drawXBM(0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
     u8cursor = 56;
@@ -955,7 +954,8 @@ void serverDeepSleep() {
 }
 
 void cameraInit() {
-  Serial.println("cameraInit() _exposure: "+String(cameraSetExposure));
+  int waitMs = 700;
+  Serial.println("cameraInit() _exposure: "+String(cameraSetExposure)+" waitMS: "+String(waitMs));
   if (strcmp(camera_mosfet, "0") == 0) {
     // Set back the selected resolution
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
@@ -968,9 +968,6 @@ void cameraInit() {
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
-
-  int waitMs = 700;
-  Serial.println("cameraInit() waitMS: "+String(waitMs));
   delay(waitMs);                       // 750 base
   myCAM.write_reg(3, VSYNC_LEVEL_MASK);// VSYNC is active HIGH
   myCAM.OV5642_set_JPEG_size(jpeg_size_id);
@@ -983,7 +980,7 @@ void cameraInit() {
 }
 
 void cameraOff() {
-  if (strcmp(camera_mosfet,"0")==0) return;
+  if (strcmp(camera_mosfet, "0") == 0) return;
   digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
   Serial.println("cameraOff()");
 }
