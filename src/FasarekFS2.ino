@@ -815,9 +815,9 @@ void serverCaptureSpiffsWifi() {
     // Draw thumbnail coming from json
     // TODO: Optimize JSON to return a smaller array of 0,1 pixels instead of "0xFF"
     u8g2.clearBuffer();
+    u8g2.setDrawColor(0);
     u8g2.drawXBM(0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
     u8cursor = yOffset;
-    u8g2.setDrawColor(0);
     u8g2.drawBox(0, yOffset-1, 40, 1); // Draw line to separate text
     u8g2.setDrawColor(1);
     int secs = (millis() - total_time)/1000;
