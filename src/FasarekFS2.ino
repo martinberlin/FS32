@@ -638,6 +638,7 @@ void serverCaptureWifi() {
 
 void serverCaptureSpiffsWifi() {
   int total_time = millis();
+  byte yOffset = 57;
   cameraInit();
   
   start_capture();
@@ -673,7 +674,7 @@ void serverCaptureSpiffsWifi() {
      if (SPIFFS.exists("/"+filename)) {
         SPIFFS.remove("/"+filename);
      }
-    u8cursor = 56;
+    u8cursor = yOffset;
     printMessage("FS:"+filename+" "+(len/1024)+" Kb");
     fsFile = SPIFFS.open("/"+filename, "w");
     while (len) {
@@ -717,7 +718,7 @@ void serverCaptureSpiffsWifi() {
     
     _md5.begin();
     int loops = 1;
-    u8cursor = 56;
+    u8cursor = yOffset;
     printMessage("Upload "+String(len/1024)+ " Kb");
     static uint8_t bufferW[bufferSize] = {0xFF};
     while (len) {
@@ -815,7 +816,10 @@ void serverCaptureSpiffsWifi() {
     // TODO: Optimize JSON to return a smaller array of 0,1 pixels instead of "0xFF"
     u8g2.clearBuffer();
     u8g2.drawXBM(0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
-    u8cursor = 56;
+    u8cursor = yOffset;
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(0, yOffset-1, 40, 1); // Draw line to separate text
+    u8g2.setDrawColor(1);
     int secs = (millis() - total_time)/1000;
     printMessage(String(secs)+ " s.");
     u8g2.sendBuffer();
