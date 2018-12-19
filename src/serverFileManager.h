@@ -27,9 +27,7 @@ bool isServerListable(char* filename) {
 void serverListFiles() {
   
   String fileName = "/template.html";
-  webTemplate = "";
-  printMessage("Listing files", true);
-  
+  webTemplate = "";  
   if (SPIFFS.exists(fileName)) {
     File file = SPIFFS.open(fileName, "r");
     while (file.available() != 0) {  
@@ -127,7 +125,6 @@ void serverDeleteFile() {
       String filename = server.arg(0);
       if(isServerDeleteable(filename)) {
          SPIFFS.remove("/"+filename);
-         printMessage("> Deleting "+ filename);
       }
       server.sendHeader("Location", "/fs/list", true);
       server.send (302, "text/plain", "");
