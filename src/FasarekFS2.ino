@@ -66,8 +66,8 @@ const int ledStatus = 12;
 String javascriptFadeMessage = "<script>setTimeout(function(){document.getElementById('m').innerHTML='';},9000);</script>";
 String message;
 
-// Note if saving to SPIFFS bufferSize needs to be 256, otherwise won't save correctly
-static const size_t bufferSize = 1024;
+// Note: ESP32 if saving to SPIFFS bufferSize needs to be 256, otherwise won't save correctly
+static const size_t bufferSize = 512;
 static uint8_t buffer[bufferSize] = {0xFF};
 
 // UPLOAD Settings
@@ -115,10 +115,11 @@ byte   cameraSetExposure;
 #include "serverFileManager.h"   // Responds to the FS Routes
 // ROUTING Definitions
 void defineServerRouting() {
+  // Depending on spiffsFirst it calls one funcion or the other on the routing
   if (spiffsFirst) {
     server.on("/capture", HTTP_GET, serverCaptureSpiffsWifi);
   } else {
-     server.on("/capture", HTTP_GET, serverCaptureWifi);
+    server.on("/capture", HTTP_GET, serverCaptureWifi);
   }
    
     server.on("/stream", HTTP_GET, serverStream);
@@ -134,7 +135,7 @@ void defineServerRouting() {
     server.begin();
 }
 char camHash[33];
-// Default image (LOGO?)
+// Default image (LOGO?) TODO: This big array needs to go away
 static unsigned char image[] U8X8_PROGMEM  = {
   0x00, 0xC0, 0xFF, 0xFF, 0xFF, 0x0F, 0x00, 0x00, 0xFE, 0xFF, 0xFF, 0x17, 
   0xFC, 0xFF, 0xFF, 0xFF, 0x00, 0xE0, 0xFF, 0xFF, 0xFF, 0x3F, 0x00, 0x00, 
@@ -697,7 +698,7 @@ void serverCaptureSpiffsWifi() {
       }
       loops++;
     }
-   // No need since we turn camera off: myCAM.CS_HIGH();
+  myCAM.CS_HIGH();
   cameraOff();
 
   // WiFi upload reading image from SPIFFS
@@ -711,7 +712,7 @@ void serverCaptureSpiffsWifi() {
     if (client.connect(upload_host, 80)) { 
       while(client.available()) {
         String line = client.readStringUntil('\r');
-      } 
+      }
       u8g2.clearBuffer();
       client.println("POST "+String(upload_path)+" HTTP/1.1");
       client.println("Host: "+String(upload_host));
@@ -785,7 +786,7 @@ void serverCaptureSpiffsWifi() {
   _md5.calculate();
   _md5.getChars(camHash);
   response.trim();
-  //Serial.println(response);Serial.println(camHash);
+  
   DynamicJsonBuffer jsonBuffer;
   JsonObject& json = jsonBuffer.parseObject(response);
    
@@ -830,7 +831,8 @@ void serverCaptureSpiffsWifi() {
   }
   
   //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Make comparison fail
-  //Serial.println("cam HASH: " +String(camHash));Serial.println("api HASH: " +String(hash));
+  //Serial.println(response);Serial.println(camHash);
+  Serial.println("cam HASH: " +String(camHash));Serial.println("api HASH: " +String(hash));
   String hashCheck;
   if (strcmp(camHash, hash) == 0) {
       hashCheck = "<label style='color:green'>Image verified: "+String(camHash)+"</label><br>";
@@ -1186,7 +1188,7 @@ void loop() {
     server.handleClient(); 
    }
  if (touchEnabled && (touchRead(gpioTouch) < 50)) {
-    //printMessage("TOUCH",true,true);
+    printMessage(String(touchRead(gpioTouch)), true);
     shutterReleased();
   } 
   if (!touchEnabled)  {

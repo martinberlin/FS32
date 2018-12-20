@@ -39,7 +39,6 @@ String getContentType(String filename) {
  * Generic message printer. Modify this if you want to send this messages elsewhere (Display)
  */
 void printMessage(String message, bool newline = true, bool displayClear = false) {
-  //u8g2.setDrawColor(1);
   if (displayClear) {
     // Clear buffer and reset cursor to first line
     u8g2.clearBuffer();
