@@ -21,3 +21,16 @@ And that's all. It will be kept to this mini set of 5 Points. All the rest shoul
 1. An ESP32 board (Heltec, Wemos Lolin 32, any other)
 2. An OV5642 ArduCam
 3. A simple button that will connect a GPIO to GND
+
+### JSON config
+
+   {
+  "timelapse":    120,
+  "upload_host" : "api.slosarek.eu",
+  "upload_path" : "/camera-uploads/upload-xbm.php?f=CAF",
+  "slave_cam_ip": "",
+  "jpeg_size" : "1600x1200",
+  "camera_mosfet" : 1   // 1 Arducam will receive 3.3v on VCC only at the moment of taking picture 
+                        //   (Keeps consumption lower but has a 750 ms to allow camera wakeUp)
+                        // 0 Arducam will receive always 3.3v (And will have no delay() on shutter press)
+   }
