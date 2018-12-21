@@ -362,6 +362,10 @@ void setup() {
     json.printTo(Serial);
     json.printTo(configFile);
     configFile.close();
+
+    printMessage("Restarting...", true);
+    delay(1500);
+    ESP.restart();
   }
 
   // Button events
@@ -887,7 +891,7 @@ void saveConfigCallback() {
   memory.resetWifiSettings = false;
   EEPROM_writeAnything(0, memory);
   shouldSaveConfig = true;
-  printMessage("Saving config");
+  printMessage("Saving config", true);
 }
 
 void saveParamCallback(){
