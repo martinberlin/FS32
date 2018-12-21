@@ -613,14 +613,16 @@ void serverCaptureWifi() {
     const char* tempx;
     for (auto value : arr) {
       tempx = value.as<char*>();
-      image[c] = strtol(tempx, NULL, 16);
+      // base 10: thumb=2 (INT lighter) | base 16: thumb=1 (HEX xbm) 
+      image[c] = strtol(tempx, NULL, 10); 
       c++;      
     }
 
-    //u8g2.setDrawColor(0);
+    u8g2.setDrawColor(0);
     u8g2.clearBuffer();
     u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
     u8g2.sendBuffer();
+    u8g2.setDrawColor(1);
   }
   String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
 
@@ -814,7 +816,8 @@ void serverCaptureSpiffsWifi() {
     const char* tempx;
     for (auto value : arr) {
       tempx = value.as<char*>();
-      image[c] = strtol(tempx, NULL, 16);
+      // base 10: thumb=2 (INT lighter) | base 16: thumb=1 (HEX xbm) 
+      image[c] = strtol(tempx, NULL, 10); 
       c++;      
     }
     // Draw thumbnail coming from json
