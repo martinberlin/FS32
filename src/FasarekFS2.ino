@@ -14,7 +14,7 @@
 // SCK  18
 // SDA  21
 // SCL  22
-// SHU  04 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
+// SHU  0 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
 // LED  12 ledStatus
 // OLED Display /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16
 #include <Arduino.h>
@@ -36,16 +36,16 @@ MD5Builder _md5;
 //U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 // JPEG decoder library
 #include <JPEGDecoder.h>
-//#include <TFT_eSPI.h>
-//TFT_eSPI tft = TFT_eSPI(); // TODO: Update MOSI pin 23
+#include <TFT_eSPI.h>
+TFT_eSPI tft = TFT_eSPI();
 
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
-const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
-// NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
-byte  CS = 17;                                // set GPIO17 as the slave select for Camera SPI
-bool spiffsFirst = true;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
+const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
+const byte gpioButton    = 0;                 // GPIO Shutter button (On press -> Ground)
+const byte  CS = 17;                          // set GPIO17 as the slave select for Camera SPI
+bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 
 // AP to Setup WiFi & Camera settings
@@ -60,7 +60,7 @@ const char* localDomain  = "cam";              // mDNS: cam.local
 bool shouldSaveConfig = false;
 
 // Outputs / Inputs (Shutter button)
-OneButton buttonShutter(4, true, false);
+OneButton buttonShutter(gpioButton, true, false);
 const int ledStatus = 12;
 
 // Makes a div id="m" containing response message to dissapear after 6 seconds
@@ -139,15 +139,20 @@ char camHash[33];
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("setup() "+String(ESP.getFreeHeap()));
-  Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
-  //tft.begin();
-  //tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
-  //tft.fillScreen(TFT_BLACK);
 
+    // TFT initialization
+    tft.begin();
+    tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_BLUE);
+    tft.setCursor(0, u8cursor);
+    tft.print("DISPLAY TEST");
+    delay(2000);
+    
+  Serial.println("setup() xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
-  
+    
   // Find out what are this PINS on ESP32 
   //Serial.print("MOSI:");Serial.println(MOSI);
   //Serial.print("MISO:");Serial.println(MISO);
@@ -233,15 +238,14 @@ void setup() {
   wm.setDebugOutput(false);
   
   // If saveParamCallback is called then on next restart trigger config portal to update camera params
-  if (memory.editSetup) {
-    // Let's do this just one time: Restarting again should connect to previous WiFi
-    memory.editSetup = false;
-    EEPROM_writeAnything(0, memory);
-    wm.startConfigPortal(configModeAP);
-  } else {
-    delay(1000);
+  // if (memory.editSetup) {
+  //   // Let's do this just one time: Restarting again should connect to previous WiFi
+  //   memory.editSetup = false;
+  //   EEPROM_writeAnything(0, memory);
+  //   wm.startConfigPortal(configModeAP);
+  // } else {
     wm.autoConnect(configModeAP);
-  }
+  //}
   
   Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   // Read updated parameters
@@ -288,7 +292,7 @@ void setup() {
   // myCAM.write_reg uses Wire for I2C communication
   Wire.begin();
   SPI.begin();
-  SPI.setFrequency(4000000); //4MHz
+  //SPI.setFrequency(4000000); //4MHz
 
   if (String(jpeg_size) == "640x480") {
    jpeg_size_id = 1;
@@ -344,10 +348,11 @@ void setup() {
   } else {
     digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
   }
-     printMessage("FS2 CAMERA READY", true, true);
-     u8cursor = u8cursor+u8newline;
-     printMessage("Res: "+ String(jpeg_size), true);
-     printMessage(IpAddress2String(WiFi.localIP()));
+
+    printMessage("FS2 CAMERA READY", true, true);
+    u8cursor = u8cursor+u8newline;
+    printMessage("Res: "+ String(jpeg_size), true);
+    printMessage(IpAddress2String(WiFi.localIP()));
 
   // Set up mDNS responder:
   if (onlineMode) {  //TODO Check if this onlineMode thing makes sense
@@ -382,7 +387,6 @@ String camCaptureWifi(ArduCAM myCAM) {
   int loops = 1;
   myCAM.CS_LOW();
   myCAM.set_fifo_burst();
-  
  
       // Pure WiFi upload, no SPIFFS
       if (client.connect(upload_host, 80) && onlineMode) { 
@@ -439,7 +443,6 @@ String camCaptureWifi(ArduCAM myCAM) {
       printMessage(String(upload_host));
       return message;
     }
-  
   Serial.println("myCAM.CS_HIGH()");
   myCAM.CS_HIGH();
 
@@ -471,9 +474,7 @@ String camCaptureWifi(ArduCAM myCAM) {
   _md5.getChars(camHash); 
   response.trim();
   client.stop();
-
- 
-  Serial.println(response); Serial.println(camHash);
+  //Serial.println(response); Serial.println(camHash);
   return response;
 }
 

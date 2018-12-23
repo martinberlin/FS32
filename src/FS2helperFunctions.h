@@ -39,19 +39,18 @@ String getContentType(String filename) {
  * Generic message printer. Modify this if you want to send this messages elsewhere (Display)
  */
 void printMessage(String message, bool newline = true, bool displayClear = false) {
-  //u8g2.setDrawColor(1);
   if (displayClear) {
     // Clear buffer and reset cursor to first line
-    //u8g2.clearBuffer();
+    
     u8cursor = u8newline;
   }
   if (newline) {
     u8cursor = u8cursor+u8newline;
   }
-  Serial.print(message);
-  // u8g2.setCursor(0, u8cursor);
-  // u8g2.print(message);
-  // u8g2.sendBuffer();
+  Serial.println(message);
+  // tft.setCursor(0, u8cursor);
+  // tft.print(message);
+  // u8g2.sendBuffer(); // In TFT ?
   u8cursor = u8cursor+u8newline;
   if (u8cursor > 60) {
     u8cursor = u8newline;
