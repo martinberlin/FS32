@@ -31,10 +31,13 @@
 #include <OneButton.h>
 #include <ArduinoJson.h>    // Any version > 5.13.3 gave me an error on swap function
 #include <WebServer.h>
-#include <U8g2lib.h>        // OLED display I2C Settings are for Heltec board, change it to suit yours:
 #include <MD5Builder.h>
 MD5Builder _md5;
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+//U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+// JPEG decoder library
+#include <JPEGDecoder.h>
+//#include <TFT_eSPI.h>
+//TFT_eSPI tft = TFT_eSPI(); // TODO: Update MOSI pin 23
 
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
@@ -132,16 +135,16 @@ void defineServerRouting() {
     server.begin();
 }
 char camHash[33];
-static unsigned char image[705] U8X8_PROGMEM;
+//static unsigned char image[705] U8X8_PROGMEM;
 
 void setup() {
   Serial.begin(115200);
   Serial.println("setup() "+String(ESP.getFreeHeap()));
   Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
-  u8g2.begin();
-  u8g2.setCursor(0, u8cursor);
-  u8g2.setFont(u8g2_font_pcsenior_8r);
-  u8g2.setDisplayRotation(U8G2_R2); // U8G2_R0 No rotation, landscape
+  //tft.begin();
+  //tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
+  //tft.fillScreen(TFT_BLACK);
+
   cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
   
@@ -479,7 +482,7 @@ void serverCaptureWifi() {
   cameraInit();
   
   start_capture();
-  u8g2.clearBuffer();
+  //u8g2.clearBuffer();
   int total_time = millis();
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
     delay(0);
@@ -525,15 +528,15 @@ void serverCaptureWifi() {
     for (auto value : arr) {
       tempx = value.as<char*>();
       // base 10: thumb=2 (INT lighter) | base 16: thumb=1 (HEX xbm) 
-      image[c] = strtol(tempx, NULL, 10); 
+      //image[c] = strtol(tempx, NULL, 10); 
       c++;
     }
 
-    u8g2.setDrawColor(0);
-    u8g2.clearBuffer();
-    u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
-    u8g2.sendBuffer();
-    u8g2.setDrawColor(1);
+    //u8g2.setDrawColor(0);
+    //u8g2.clearBuffer();
+    //u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
+    //u8g2.sendBuffer();
+    //u8g2.setDrawColor(1);
   }
   String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
 
@@ -560,7 +563,7 @@ void serverCaptureSpiffsWifi() {
   cameraInit();
   
   start_capture();
-  u8g2.clearBuffer();
+  //u8g2.clearBuffer();
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
     delay(0);
   }
@@ -626,7 +629,7 @@ void serverCaptureSpiffsWifi() {
       while(client.available()) {
         String line = client.readStringUntil('\r');
       } 
-      u8g2.clearBuffer();
+      //u8g2.clearBuffer();
       client.println("POST "+String(upload_path)+" HTTP/1.1");
       client.println("Host: "+String(upload_host));
       client.println("Content-Type: multipart/form-data; boundary="+boundary);
@@ -728,12 +731,12 @@ void serverCaptureSpiffsWifi() {
     for (auto value : arr) {
       tempx = value.as<char*>();
       // base 10: thumb=2 (INT lighter) | base 16: thumb=1 (HEX xbm) 
-      image[c] = strtol(tempx, NULL, 10); 
+      //image[c] = strtol(tempx, NULL, 10); 
       c++;      
     }
     // Draw thumbnail coming from json
     // TODO: Optimize JSON to return a smaller array of 0,1 pixels instead of "0xFF"
-    u8g2.clearBuffer();
+    /* u8g2.clearBuffer();
     u8g2.setDrawColor(0);
     u8g2.drawXBM(0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
     u8cursor = yOffset;
@@ -741,7 +744,7 @@ void serverCaptureSpiffsWifi() {
     u8g2.setDrawColor(1);
     int secs = (millis() - total_time)/1000;
     printMessage(String(secs)+ " s.");
-    u8g2.sendBuffer();
+    u8g2.sendBuffer(); */
   }
   
   //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Make comparison fail
@@ -869,10 +872,10 @@ void serverDeepSleep() {
   server.send(200, "text/html", "<div id='m'><h5>Entering deep sleep, server will not respond until restart</div>");
   delay(1000);
     // Send Oled to sleep
-  u8x8_cad_StartTransfer(u8g2.getU8x8());
+  /* u8x8_cad_StartTransfer(u8g2.getU8x8());
   u8x8_cad_SendCmd( u8g2.getU8x8(), 0x8d);
   u8x8_cad_SendArg( u8g2.getU8x8(), 0x10);
-  u8x8_cad_EndTransfer(u8g2.getU8x8());
+  u8x8_cad_EndTransfer(u8g2.getU8x8()); */
   esp_deep_sleep_start();
 }
 
@@ -1044,7 +1047,7 @@ String wifiUploadFromSpiff() {
           itoa(kbSent, pb1, 10);
           char progressBarMessage[sizeof(pb1) + 1];
           sprintf(progressBarMessage, "%s kb WiFi  ", pb1);
-          u8g2.drawStr(0, 18, progressBarMessage);
+          //u8g2.drawStr(0, 18, progressBarMessage);
         }
         loops++;
         
