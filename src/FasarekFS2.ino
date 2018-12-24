@@ -14,7 +14,7 @@
 // SCK  18
 // SDA  21
 // SCL  22
-// SHU  0 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
+// SHU  4 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
 // LED  12 ledStatus
 // OLED Display /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16
 #include <Arduino.h>
@@ -43,7 +43,7 @@ TFT_eSPI tft = TFT_eSPI();
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
-const byte gpioButton    = 0;                 // GPIO Shutter button (On press -> Ground)
+const byte gpioButton    = 4;                 // GPIO Shutter button (On press -> Ground)
 const byte  CS = 17;                          // set GPIO17 as the slave select for Camera SPI
 bool spiffsFirst = false;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
@@ -228,17 +228,16 @@ void setup() {
   wm.setDebugOutput(false);
   
   // If saveParamCallback is called then on next restart trigger config portal to update camera params
-  // if (memory.editSetup) {
-  //   // Let's do this just one time: Restarting again should connect to previous WiFi
-  //   memory.editSetup = false;
-  //   EEPROM_writeAnything(0, memory);
-  //   wm.startConfigPortal(configModeAP);
-  // } else {
-    delay(5000);
+  if (memory.editSetup) {
+    // Let's do this just one time: Restarting again should connect to previous WiFi
+    memory.editSetup = false;
+    EEPROM_writeAnything(0, memory);
+    wm.startConfigPortal(configModeAP);
+  } else {
     wm.autoConnect(configModeAP);
-  //}
+  }
   
-  Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
+  //Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   // Read updated parameters
   strcpy(timelapse, param_timelapse.getValue());
   strcpy(slave_cam_ip, param_slave_cam_ip.getValue());
@@ -341,7 +340,7 @@ void setup() {
   }
 
     tft.begin();
-    tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
+    tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_BLUE);
     tft.setCursor(0, u8cursor);
