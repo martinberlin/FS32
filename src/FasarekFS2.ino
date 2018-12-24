@@ -366,16 +366,31 @@ void setup() {
   }
   }
 
-String camCaptureWifi(ArduCAM myCAM) {
-  Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" camCapture() start");
-  uint32_t len  = myCAM.read_fifo_length();
+void serverCaptureWifi() {
+  //digitalWrite(ledStatus, HIGH);
+  cameraInit();
+  
+  start_capture();
+  int total_time = millis();
+  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
+    delay(0);
+  }
+  /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
+  if (onlineMode) {
+    shutterPing();
+  } 
+  */
+  String response = "";
+   uint32_t len  = myCAM.read_fifo_length();
   uint32_t length = len;
   char pb1 [11];  // Sent Kb in progressBar
   
   if (len == 0) {
-    message = "ERR read memory";
+    message = "ERR reading CAM memory";
     printMessage(message);
-    return message;
+    server.send(200, "text/html", message);
+      delay(100);
+      return;
   }
   static uint8_t buffer[bufferSize] = {0xFF};
   uint32_t full_length = start_request.length() + len + end_request.length();
@@ -412,7 +427,9 @@ String camCaptureWifi(ArduCAM myCAM) {
             client.stop();
             printMessage("JPEG corrupt", true);
             printMessage("Abort transfer", true);
-            return "JPEG headers corrupt";
+            server.send(200, "text/html", "JPEG headers corrupt");
+            delay(100);
+            return;
           }
           _md5.add(buffer, will_copy);
           //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
@@ -438,14 +455,12 @@ String camCaptureWifi(ArduCAM myCAM) {
       message = "ERROR: Could not connect to "+String(upload_host);
       printMessage("Conn failed to");
       printMessage(String(upload_host));
-      return message;
+      server.send(200, "text/html", message);
+      delay(100);
+      return;
     }
   Serial.println("myCAM.CS_HIGH()");
   myCAM.CS_HIGH();
-
-  bool   skip_headers = true;
-  String rx_line;
-  String response;
   
   // Read all the lines of the reply from server and print them to Serial
   int timeout = millis() + 5000;
@@ -454,50 +469,25 @@ String camCaptureWifi(ArduCAM myCAM) {
       message = "Client timeout";
       printMessage(message);
       client.stop();
-      return message;
+      server.send(200, "text/html", message+" waiting for JSON response");
+      delay(100);
+      return;
     }
   }
-  while(client.available()) {
-    rx_line = client.readStringUntil('\r');
-    if (rx_line.length() <= 1) { 
-        skip_headers = false;
-      }
-      // Collect http response
-     if (!skip_headers) {
-        response += rx_line;
-     }
-  }
-  _md5.calculate();
-  _md5.getChars(camHash); 
-  response.trim();
-  client.stop();
-  //Serial.println(response); Serial.println(camHash);
-  return response;
-}
 
-void serverCaptureWifi() {
-  //digitalWrite(ledStatus, HIGH);
-  cameraInit();
-  
-  start_capture();
-  int total_time = millis();
-  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
-    delay(0);
-  }
-  /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
-  if (onlineMode) {
-    shutterPing();
-  } 
-  */
-  String response = "";
-  response = camCaptureWifi(myCAM);
+  // Skip response headers
+  char endOfHeaders[] = "\r\n\r\n";
+  client.find(endOfHeaders);
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& json = jsonBuffer.parseObject(client);
+  client.stop();
+  _md5.calculate();
+  _md5.getChars(camHash);
   
   //Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
   total_time = millis() - total_time;
   cameraOff();
-  const char * jsonResponse = response.c_str();
-  DynamicJsonBuffer jsonBuffer;
-  JsonObject& json = jsonBuffer.parseObject(jsonResponse);
+  
   u8cursor = 90;
   printMessage(String(response.length())+" response length", true);
   if (!json.success()) {
@@ -536,7 +526,10 @@ void serverCaptureWifi() {
   if (strcmp(camHash, hash) == 0) {
       hashCheck = "<label style='color:green'>Image verified: "+String(camHash)+"</label>";
   } else {
-    printMessage("UP. CORRUPT"); // Repeat upload automatically
+    printMessage("UP. CORRUPT"); // Repeat upload automatically?
+    server.send(200, "text/html", "<label style='color:red'>Upload error</label> File does not match Arducam picture in memory");
+    delay(100);
+    return;
   }
   
   if (onlineMode) {
