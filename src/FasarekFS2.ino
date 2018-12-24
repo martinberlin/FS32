@@ -36,8 +36,8 @@ MD5Builder _md5;
 //U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 // JPEG decoder library
 #include <JPEGDecoder.h>
-// #include <TFT_eSPI.h>
-// TFT_eSPI tft = TFT_eSPI();
+#include <TFT_eSPI.h>
+TFT_eSPI tft = TFT_eSPI();
 
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
@@ -340,12 +340,11 @@ void setup() {
     digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
   }
 
-    //TFT initialization
-    // tft.begin();
-    // tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
-    // tft.fillScreen(TFT_BLACK);
-    // tft.setTextColor(TFT_BLUE);
-    // tft.setCursor(0, u8cursor);
+    tft.begin();
+    tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_BLUE);
+    tft.setCursor(0, u8cursor);
     printMessage("FS2 CAMERA READY", true, true);
     u8cursor = u8cursor+u8newline;
     printMessage("Res: "+ String(jpeg_size), true);
@@ -392,7 +391,7 @@ String camCaptureWifi(ArduCAM myCAM) {
         String line = client.readStringUntil('\r');
       }  // Empty wifi receive bufffer
       u8cursor = 40;
-      printMessage(String(full_length/1024)+ " Kb jpeg");
+      //printMessage(String(full_length/1024)+ " Kb jpeg");
       //printMessage(String(upload_host));
         client.println("POST "+String(upload_path)+" HTTP/1.1");
         client.println("Host: "+String(upload_host));
