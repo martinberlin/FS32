@@ -45,7 +45,7 @@ TFT_eSPI tft = TFT_eSPI();
 const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 const byte gpioButton    = 0;                 // GPIO Shutter button (On press -> Ground)
 const byte  CS = 17;                          // set GPIO17 as the slave select for Camera SPI
-bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
+bool spiffsFirst = true;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 
 // AP to Setup WiFi & Camera settings
@@ -139,16 +139,6 @@ char camHash[33];
 
 void setup() {
   Serial.begin(115200);
-
-    // TFT initialization
-    tft.begin();
-    tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_BLUE);
-    tft.setCursor(0, u8cursor);
-    tft.print("DISPLAY TEST");
-    delay(2000);
-    
   Serial.println("setup() xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
@@ -244,6 +234,7 @@ void setup() {
   //   EEPROM_writeAnything(0, memory);
   //   wm.startConfigPortal(configModeAP);
   // } else {
+    delay(5000);
     wm.autoConnect(configModeAP);
   //}
   
@@ -292,7 +283,7 @@ void setup() {
   // myCAM.write_reg uses Wire for I2C communication
   Wire.begin();
   SPI.begin();
-  //SPI.setFrequency(4000000); //4MHz
+  SPI.setFrequency(4000000); //4MHz
 
   if (String(jpeg_size) == "640x480") {
    jpeg_size_id = 1;
@@ -349,6 +340,12 @@ void setup() {
     digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
   }
 
+    //TFT initialization
+    tft.begin();
+    tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_BLUE);
+    tft.setCursor(0, u8cursor);
     printMessage("FS2 CAMERA READY", true, true);
     u8cursor = u8cursor+u8newline;
     printMessage("Res: "+ String(jpeg_size), true);

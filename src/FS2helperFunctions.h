@@ -41,16 +41,16 @@ String getContentType(String filename) {
 void printMessage(String message, bool newline = true, bool displayClear = false) {
   if (displayClear) {
     // Clear buffer and reset cursor to first line
-    
+    tft.fillScreen(TFT_BLACK);
     u8cursor = u8newline;
   }
   if (newline) {
     u8cursor = u8cursor+u8newline;
   }
   Serial.println(message);
-  // tft.setCursor(0, u8cursor);
-  // tft.print(message);
-  // u8g2.sendBuffer(); // In TFT ?
+  tft.setCursor(0, u8cursor);
+  tft.print(message);
+  
   u8cursor = u8cursor+u8newline;
   if (u8cursor > 60) {
     u8cursor = u8newline;
