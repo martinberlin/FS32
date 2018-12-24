@@ -135,7 +135,7 @@ void defineServerRouting() {
     server.begin();
 }
 char camHash[33];
-static unsigned char image[3000] PROGMEM;
+static unsigned char image[4000] PROGMEM;
 
 void setup() {
   Serial.begin(115200);
@@ -475,11 +475,10 @@ String camCaptureWifi(ArduCAM myCAM) {
 }
 
 void serverCaptureWifi() {
-  digitalWrite(ledStatus, HIGH);
+  //digitalWrite(ledStatus, HIGH);
   cameraInit();
   
   start_capture();
-  //u8g2.clearBuffer();
   int total_time = millis();
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
     delay(0);
@@ -494,7 +493,6 @@ void serverCaptureWifi() {
   
   //Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
   total_time = millis() - total_time;
-  Serial.print("RENDER THUMB json bytes:"+String(response.length())+" ");
   cameraOff();
 
   DynamicJsonBuffer jsonBuffer;
@@ -510,14 +508,10 @@ void serverCaptureWifi() {
   //json.printTo(Serial); // Only for debugging purpouses, may kill everything
   char imageUrl[300];
   char hash[33];
-  char thumbWidth[3];
-  char thumbHeight[3];
   strcpy(imageUrl, json["url"]);
   strcpy(hash, json["hash"]);
   
   if (json.containsKey("jpg")) {
-    strcpy(thumbWidth, json["thumb_width"]);
-    strcpy(thumbHeight, json["thumb_height"]);
     JsonArray& arr = json["jpg"];
     
     int c=0;
@@ -529,12 +523,11 @@ void serverCaptureWifi() {
     }
 
     // Draw thumbnail coming from json
+    tftClearScreen();
     drawArrayJpeg(image, sizeof(image), 0, 11);
   }
   String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
-
   //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Make comparison fail
-  
   Serial.println("cam HASH: " +String(camHash));
   Serial.println("api HASH: " +String(hash));
   
@@ -545,8 +538,11 @@ void serverCaptureWifi() {
   }
   
   if (onlineMode) {
-    u8cursor = 110;
-    printMessage("UPLOAD OK", true);
+    // cameraWiFI
+    u8cursor = 100;
+    int tookSeconds = total_time/1000;
+    printMessage("UPLOAD Ok in "+String(tookSeconds)+" secs", true);
+    printMessage(String(response.length())+" response len");
     server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
   }
@@ -712,14 +708,10 @@ void serverCaptureSpiffsWifi() {
   //json.printTo(Serial); // Only for debugging purpouses, may kill everything
   char imageUrl[300];
   char hash[33];
-  char thumbWidth[3];
-  char thumbHeight[3];
   strcpy(imageUrl, json["url"]);
   strcpy(hash, json["hash"]);
   
   if (json.containsKey("jpg")) {
-    strcpy(thumbWidth, json["thumb_width"]);
-    strcpy(thumbHeight, json["thumb_height"]);
     JsonArray& arr = json["jpg"];
     
     int c=0;
@@ -730,18 +722,12 @@ void serverCaptureSpiffsWifi() {
       image[c] = strtol(tempx, NULL, 10); 
       c++;      
     }
-    // Draw thumbnail coming from json
+    // Draw thumbnail coming from json Spiffs + WiFi
+    tft.fillScreen(TFT_BLACK);
     drawArrayJpeg(image, sizeof(image), 0, 11);
-    // TODO: Optimize JSON to return a smaller array of 0,1 pixels instead of "0xFF"
-    /* u8g2.clearBuffer();
-    u8g2.setDrawColor(0);
-    u8g2.drawXBM(0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
-    u8cursor = yOffset;
-    u8g2.drawBox(0, yOffset-1, 40, 1); // Draw line to separate text
-    u8g2.setDrawColor(1);
+    
     int secs = (millis() - total_time)/1000;
     printMessage(String(secs)+ " s.");
-    u8g2.sendBuffer(); */
   }
   
   //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Make comparison fail
@@ -868,11 +854,9 @@ void serverDeepSleep() {
 
   server.send(200, "text/html", "<div id='m'><h5>Entering deep sleep, server will not respond until restart</div>");
   delay(1000);
-    // Send Oled to sleep
-  /* u8x8_cad_StartTransfer(u8g2.getU8x8());
-  u8x8_cad_SendCmd( u8g2.getU8x8(), 0x8d);
-  u8x8_cad_SendArg( u8g2.getU8x8(), 0x10);
-  u8x8_cad_EndTransfer(u8g2.getU8x8()); */
+  // Send Oled to sleep
+  tftSleep();
+  delay(50);
   esp_deep_sleep_start();
 }
 

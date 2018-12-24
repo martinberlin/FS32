@@ -43,7 +43,7 @@ String getContentType(String filename) {
 void printMessage(String message, bool newline = true, bool displayClear = false) {
   if (displayClear) {
     // Clear buffer and reset cursor to first line
-    tft.fillScreen(TFT_BLACK); // THIS SPI Communication here breaks the JPEG
+    tft.fillScreen(TFT_BLACK); 
     u8cursor = u8newline;
   }
   if (newline) {
@@ -193,3 +193,13 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
   renderJPEG(x, y);
 }
 
+void tftSleep() { 
+  tft.writecommand(ST7735_SLPIN); 
+}
+void tftWake() { 
+  tft.writecommand(ST7735_SLPOUT); 
+}
+void tftClearScreen(){
+  tft.fillScreen(TFT_BLACK); 
+  u8cursor = u8newline;
+}
