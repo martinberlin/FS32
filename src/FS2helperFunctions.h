@@ -54,9 +54,10 @@ void printMessage(String message, bool newline = true, bool displayClear = false
   tft.print(message);
   
   u8cursor = u8cursor+u8newline;
-  if (u8cursor > 60) {
+  if (u8cursor > 120) {
     u8cursor = u8newline;
   }
+  tft.setTextColor(TFT_BLUE);
   return;
 }
 
@@ -199,7 +200,9 @@ void tftSleep() {
 void tftWake() { 
   tft.writecommand(ST7735_SLPOUT); 
 }
-void tftClearScreen(){
+void tftClearScreen(bool resetCursor = false){
   tft.fillScreen(TFT_BLACK); 
-  u8cursor = u8newline;
+  if (resetCursor) {
+     u8cursor = u8newline;
+  }
 }

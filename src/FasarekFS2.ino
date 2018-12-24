@@ -335,10 +335,11 @@ void setup() {
       myCAM.write_reg(3, 2);   //VSYNC is active HIGH 
     }
 
-  } else {
-    digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
-  }
-
+  } 
+  // else {
+  //   digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
+  // }
+    cameraOff();
     tft.begin();
     tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
     tft.fillScreen(TFT_BLACK);
@@ -494,11 +495,13 @@ void serverCaptureWifi() {
   //Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
   total_time = millis() - total_time;
   cameraOff();
-
+  const char * jsonResponse = response.c_str();
   DynamicJsonBuffer jsonBuffer;
-  JsonObject& json = jsonBuffer.parseObject(response);
-   
+  JsonObject& json = jsonBuffer.parseObject(jsonResponse);
+  u8cursor = 90;
+  printMessage(String(response.length())+" response length", true);
   if (!json.success()) {
+    tft.setTextColor(TFT_RED);
     printMessage("JSON parse fail");
     server.send(200, "text/html", "<div id='m'>JSON parse error. Debug:</div><br>"+response);
     delay(100);
@@ -513,7 +516,6 @@ void serverCaptureWifi() {
   
   if (json.containsKey("jpg")) {
     JsonArray& arr = json["jpg"];
-    
     int c=0;
     const char* tempx;
     for (auto value : arr) {
@@ -539,10 +541,10 @@ void serverCaptureWifi() {
   
   if (onlineMode) {
     // cameraWiFI
-    u8cursor = 100;
     int tookSeconds = total_time/1000;
-    printMessage("UPLOAD Ok in "+String(tookSeconds)+" secs", true);
-    printMessage(String(response.length())+" response len");
+    tft.setTextColor(TFT_GREEN);
+    printMessage("UPLOAD OK in "+String(tookSeconds)+" secs", true);
+    
     server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
   }
