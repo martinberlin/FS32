@@ -549,6 +549,7 @@ void serverCaptureWifi() {
   }
   
   if (onlineMode) {
+    printMessage("UPLOAD OK", true);
     server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
   }
@@ -882,6 +883,7 @@ void cameraInit() {
   Serial.println("cameraInit() _exposure: "+String(cameraSetExposure)+" waitMS: "+String(waitMs));
   if (strcmp(camera_mosfet, "0") == 0) {
     // Set back the selected resolution
+    myCAM.clear_bit(ARDUCHIP_GPIO,GPIO_PWDN_MASK); // Clear out low power flag
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
     // Set Exposure many times does not work and will make a corrupt and big JPG
     myCAM.OV5642_set_Exposure_level(cameraSetExposure);
@@ -904,7 +906,10 @@ void cameraInit() {
 }
 
 void cameraOff() {
-  if (strcmp(camera_mosfet, "0") == 0) return;
+  if (strcmp(camera_mosfet, "0") == 0) {
+    myCAM.set_bit(ARDUCHIP_GPIO,GPIO_PWDN_MASK);
+    return;
+  }
   digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
   Serial.println("cameraOff()");
 }
