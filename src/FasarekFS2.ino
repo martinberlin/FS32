@@ -36,8 +36,8 @@ MD5Builder _md5;
 //U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 // JPEG decoder library
 #include <JPEGDecoder.h>
-#include <TFT_eSPI.h>
-TFT_eSPI tft = TFT_eSPI();
+// #include <TFT_eSPI.h>
+// TFT_eSPI tft = TFT_eSPI();
 
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
@@ -45,7 +45,7 @@ TFT_eSPI tft = TFT_eSPI();
 const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 const byte gpioButton    = 0;                 // GPIO Shutter button (On press -> Ground)
 const byte  CS = 17;                          // set GPIO17 as the slave select for Camera SPI
-bool spiffsFirst = true;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
+bool spiffsFirst = false;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 
 // AP to Setup WiFi & Camera settings
@@ -341,11 +341,11 @@ void setup() {
   }
 
     //TFT initialization
-    tft.begin();
-    tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_BLUE);
-    tft.setCursor(0, u8cursor);
+    // tft.begin();
+    // tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
+    // tft.fillScreen(TFT_BLACK);
+    // tft.setTextColor(TFT_BLUE);
+    // tft.setCursor(0, u8cursor);
     printMessage("FS2 CAMERA READY", true, true);
     u8cursor = u8cursor+u8newline;
     printMessage("Res: "+ String(jpeg_size), true);
@@ -406,7 +406,8 @@ String camCaptureWifi(ArduCAM myCAM) {
       while (len) {
           size_t will_copy = (len < bufferSize) ? len : bufferSize;
           // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
-          SPI.transfer(buffer, will_copy);
+          //SPI.transfer(buffer, will_copy);
+          SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
           // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
           if ((loops == 1) && (buffer[0] != 255) && (buffer[1] = 216)) {
             client.stop();
@@ -598,7 +599,8 @@ void serverCaptureSpiffsWifi() {
     fsFile = SPIFFS.open("/"+filename, "w");
     while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
-      SPI.transfer(buffer, will_copy);
+      //SPI.transfer(buffer, will_copy); // only platform-espressif32.git#feature/stage
+      SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
       if (fsFile) {
         fsFile.write(&buffer[0], will_copy);
       }
