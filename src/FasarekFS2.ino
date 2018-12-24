@@ -336,10 +336,10 @@ void setup() {
     }
 
   } 
-  // else {
-  //   digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
-  // }
-    cameraOff();
+  else {
+    digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
+  }
+    //cameraOff();
     tft.begin();
     tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
     tft.fillScreen(TFT_BLACK);
@@ -369,6 +369,7 @@ void setup() {
 void serverCaptureWifi() {
   //digitalWrite(ledStatus, HIGH);
   cameraInit();
+  delay(100);
   
   start_capture();
   int total_time = millis();
@@ -474,11 +475,16 @@ void serverCaptureWifi() {
       return;
     }
   }
-
-  // Skip response headers
-  char endOfHeaders[] = "\r\n\r\n";
-  client.find(endOfHeaders);
+ 
+  String rx_line;
   DynamicJsonBuffer jsonBuffer;
+  // Skip response headers
+    while(client.available()) {
+    rx_line = client.readStringUntil('\r');
+    if (rx_line.length() <= 1) { 
+        break;
+      } 
+    }
   JsonObject& json = jsonBuffer.parseObject(client);
   client.stop();
   _md5.calculate();
@@ -487,14 +493,16 @@ void serverCaptureWifi() {
   //Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
   total_time = millis() - total_time;
   cameraOff();
-  
+
+  //json.printTo(Serial);
   u8cursor = 90;
-  printMessage(String(response.length())+" response length", true);
+  printMessage(String(json.measureLength())+" JSON length", true);
   if (!json.success()) {
     tft.setTextColor(TFT_RED);
     printMessage("JSON parse fail");
     server.send(200, "text/html", "<div id='m'>JSON parse error. Debug:</div><br>"+response);
-    delay(100);
+    delay(600);
+    tftClearScreen();
     return;
   }
   
