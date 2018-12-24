@@ -135,7 +135,7 @@ void defineServerRouting() {
     server.begin();
 }
 char camHash[33];
-//static unsigned char image[705] U8X8_PROGMEM;
+static unsigned char image[3000] PROGMEM;
 
 void setup() {
   Serial.begin(115200);
@@ -515,25 +515,21 @@ void serverCaptureWifi() {
   strcpy(imageUrl, json["url"]);
   strcpy(hash, json["hash"]);
   
-  if (json.containsKey("xbm")) {
+  if (json.containsKey("jpg")) {
     strcpy(thumbWidth, json["thumb_width"]);
     strcpy(thumbHeight, json["thumb_height"]);
-    JsonArray& arr = json["xbm"];
+    JsonArray& arr = json["jpg"];
     
     int c=0;
     const char* tempx;
     for (auto value : arr) {
       tempx = value.as<char*>();
-      // base 10: thumb=2 (INT lighter) | base 16: thumb=1 (HEX xbm) 
-      //image[c] = strtol(tempx, NULL, 10); 
+      image[c] = strtol(tempx, NULL, 10); 
       c++;
     }
 
-    //u8g2.setDrawColor(0);
-    //u8g2.clearBuffer();
-    //u8g2.drawXBM( 0, 0, atoi(thumbWidth), atoi(thumbHeight), (const uint8_t *)image);
-    //u8g2.sendBuffer();
-    //u8g2.setDrawColor(1);
+    // Draw thumbnail coming from json
+    drawArrayJpeg(image, sizeof(image), 0, 11);
   }
   String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
 
@@ -549,6 +545,7 @@ void serverCaptureWifi() {
   }
   
   if (onlineMode) {
+    u8cursor = 110;
     printMessage("UPLOAD OK", true);
     server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
@@ -720,20 +717,21 @@ void serverCaptureSpiffsWifi() {
   strcpy(imageUrl, json["url"]);
   strcpy(hash, json["hash"]);
   
-  if (json.containsKey("xbm")) {
+  if (json.containsKey("jpg")) {
     strcpy(thumbWidth, json["thumb_width"]);
     strcpy(thumbHeight, json["thumb_height"]);
-    JsonArray& arr = json["xbm"];
+    JsonArray& arr = json["jpg"];
     
     int c=0;
     const char* tempx;
     for (auto value : arr) {
       tempx = value.as<char*>();
       // base 10: thumb=2 (INT lighter) | base 16: thumb=1 (HEX xbm) 
-      //image[c] = strtol(tempx, NULL, 10); 
+      image[c] = strtol(tempx, NULL, 10); 
       c++;      
     }
     // Draw thumbnail coming from json
+    drawArrayJpeg(image, sizeof(image), 0, 11);
     // TODO: Optimize JSON to return a smaller array of 0,1 pixels instead of "0xFF"
     /* u8g2.clearBuffer();
     u8g2.setDrawColor(0);
