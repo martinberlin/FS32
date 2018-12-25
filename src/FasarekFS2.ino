@@ -211,6 +211,10 @@ void setup() {
   /* if (memory.resetWifiSettings) {
     wm.resetSettings();
   } */
+
+  //sets timeout until configuration portal gets turned off
+  //useful to make it all retry or go to sleep (in seconds)
+  wm.setTimeout(180);
   wm.setMenu(menu);
   // Add the defined parameters to wm
   wm.addParameter(&custom_html);
@@ -235,7 +239,11 @@ void setup() {
     EEPROM_writeAnything(0, memory);
     wm.startConfigPortal(configModeAP);
   } else {
-    wm.autoConnect(configModeAP);
+    if(!wm.autoConnect(configModeAP)) {
+      Serial.println("failed to connect and hit timeout");
+      //reset and try again, or maybe put it to deep sleep
+      ESP.restart();
+    } 
   }
   
   //Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
@@ -347,6 +355,9 @@ void setup() {
   tft.setTextColor(TFT_BLUE);
   tft.setCursor(0, u8cursor);
   printMessage("FS2 CAMERA READY", true, true);
+  printMessage("");
+  printMessage("Connected to:");
+  printMessage(WiFi.SSID());
   u8cursor = u8cursor+u8newline;
   printMessage("Res: "+ String(jpeg_size), true);
   printMessage(IpAddress2String(WiFi.localIP()));
@@ -868,8 +879,8 @@ void cameraInit() {
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
     // Set Exposure many times does not work and will make a corrupt and big JPG
     myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-    if (photoCounter == 0) delay(300);
-    delay(100);
+    if (photoCounter == 0) delay(400);
+    delay(150);
     return;
   }
   digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
