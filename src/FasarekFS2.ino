@@ -225,7 +225,7 @@ void setup() {
   wm.setBreakAfterConfig(true); // Without this saveConfigCallback does not get fired
   wm.setSaveConfigCallback(saveConfigCallback);
   wm.setAPCallback(configModeCallback);
-  wm.setDebugOutput(false);
+  wm.setDebugOutput(true);
   
   // If saveParamCallback is called then on next restart trigger config portal to update camera params
   if (memory.editSetup) {
@@ -335,10 +335,10 @@ void setup() {
       myCAM.write_reg(3, 2);   //VSYNC is active HIGH 
     }
 
-  } 
-  else {
-    digitalWrite(gpioCameraVcc, HIGH); // Turn off camera
+  } else {
+    cameraOff();
   }
+    // First foto comes out wrong using camera_mosfet:0 (No idea why, maybe not enough delay before first picture ?)
     //cameraOff();
     tft.begin();
     tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
@@ -370,7 +370,7 @@ void serverCaptureWifi() {
   //digitalWrite(ledStatus, HIGH);
   cameraInit();
   delay(100);
-  
+  printMessage("CAPTURING", true, true);
   start_capture();
   int total_time = millis();
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
@@ -494,15 +494,15 @@ void serverCaptureWifi() {
   total_time = millis() - total_time;
   cameraOff();
 
-  //json.printTo(Serial);
+  
   u8cursor = 90;
   printMessage(String(json.measureLength())+" JSON length", true);
   if (!json.success()) {
     tft.setTextColor(TFT_RED);
-    printMessage("JSON parse fail");
-    server.send(200, "text/html", "<div id='m'>JSON parse error. Debug:</div><br>"+response);
-    delay(600);
-    tftClearScreen();
+    printMessage("JSON parse failed", true, true);
+    //json.printTo(response); // To print into a String
+    server.send(200, "text/html", "<div id='m'>JSON parse error. Debug output in json.printTo(Serial)</div><br>");
+    json.printTo(Serial);
     return;
   }
   
@@ -544,7 +544,8 @@ void serverCaptureWifi() {
     // cameraWiFI
     int tookSeconds = total_time/1000;
     tft.setTextColor(TFT_GREEN);
-    printMessage("UPLOAD OK in "+String(tookSeconds)+" secs", true);
+    printMessage("UPLOAD OK", true);
+    printMessage(String(tookSeconds)+" seconds", true);
     
     server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
@@ -841,6 +842,7 @@ void serverCameraParams() {
 
 // Button events
 void shutterReleased() {
+  Serial.println("shutterReleased()");
   if (spiffsFirst) {
     serverCaptureSpiffsWifi();
   } else {
@@ -891,12 +893,12 @@ void cameraInit() {
 }
 
 void cameraOff() {
+  Serial.println("cameraOff()");
   if (strcmp(camera_mosfet, "0") == 0) {
     myCAM.set_bit(ARDUCHIP_GPIO,GPIO_PWDN_MASK);
     return;
   }
   digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
-  Serial.println("cameraOff()");
 }
 
 void serverStopStream() {
