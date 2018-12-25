@@ -41,6 +41,7 @@ String getContentType(String filename) {
  * Generic message printer. Modify this if you want to send this messages elsewhere (Display)
  */
 void printMessage(String message, bool newline = true, bool displayClear = false) {
+  if (debugMode) Serial.println(message);
   if (displayClear) {
     // Clear buffer and reset cursor to first line
     tft.fillScreen(TFT_BLACK); 
@@ -49,8 +50,8 @@ void printMessage(String message, bool newline = true, bool displayClear = false
   if (newline) {
     u8cursor = u8cursor+u8newline;
   }
-  Serial.println(message);
-  tft.setCursor(0, u8cursor);
+  
+  tft.setCursor(2, u8cursor);
   tft.print(message);
   
   u8cursor = u8cursor+u8newline;

@@ -14,7 +14,7 @@
 // SCK  18
 // SDA  21
 // SCL  22
-// SHU  4 Shutter button : Update it to whenever thin GPIO connects to GND to take a picture
+// SHU  Shutter button : Update gpioButton to whenever thin GPIO connects to GND to take a picture
 // LED  12 ledStatus
 // OLED Display /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16
 #include <Arduino.h>
@@ -43,11 +43,12 @@ TFT_eSPI tft = TFT_eSPI();
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
-const byte gpioButton    = 4;                 // GPIO Shutter button (On press -> Ground)
+const byte gpioButton    = 0;                 // GPIO Shutter button (On press -> Ground)
 const byte  CS = 17;                          // set GPIO17 as the slave select for Camera SPI
 bool spiffsFirst = false;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
-
+bool debugMode = false;
+byte photoCounter = 0;
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
 const char* localDomain  = "cam";              // mDNS: cam.local
@@ -109,7 +110,7 @@ struct config_t
     bool editSetup;
 } memory;
 byte u8cursor = 1;
-byte u8newline = 5;
+byte u8newline = 6;
 String cameraSetting;
 byte   cameraSetExposure;
 #include "FS2helperFunctions.h"  // Helper methods: printMessage + EPROM
@@ -335,20 +336,20 @@ void setup() {
       myCAM.write_reg(3, 2);   //VSYNC is active HIGH 
     }
 
-  } else {
-    cameraOff();
-  }
-    // First foto comes out wrong using camera_mosfet:0 (No idea why, maybe not enough delay before first picture ?)
-    //cameraOff();
-    tft.begin();
-    tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_BLUE);
-    tft.setCursor(0, u8cursor);
-    printMessage("FS2 CAMERA READY", true, true);
-    u8cursor = u8cursor+u8newline;
-    printMessage("Res: "+ String(jpeg_size), true);
-    printMessage(IpAddress2String(WiFi.localIP()));
+  } 
+  cameraOff();
+  
+  // First foto comes out wrong using camera_mosfet:0 (No idea why, maybe not enough delay before first picture ?)
+  //cameraOff();
+  tft.begin();
+  tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_BLUE);
+  tft.setCursor(0, u8cursor);
+  printMessage("FS2 CAMERA READY", true, true);
+  u8cursor = u8cursor+u8newline;
+  printMessage("Res: "+ String(jpeg_size), true);
+  printMessage(IpAddress2String(WiFi.localIP()));
 
   // Set up mDNS responder:
   if (onlineMode) {  //TODO Check if this onlineMode thing makes sense
@@ -367,9 +368,8 @@ void setup() {
   }
 
 void serverCaptureWifi() {
-  //digitalWrite(ledStatus, HIGH);
   cameraInit();
-  delay(100);
+  photoCounter++;
   printMessage("CAPTURING", true, true);
   start_capture();
   int total_time = millis();
@@ -381,8 +381,7 @@ void serverCaptureWifi() {
     shutterPing();
   } 
   */
-  String response = "";
-   uint32_t len  = myCAM.read_fifo_length();
+  uint32_t len  = myCAM.read_fifo_length();
   uint32_t length = len;
   char pb1 [11];  // Sent Kb in progressBar
   
@@ -390,33 +389,30 @@ void serverCaptureWifi() {
     message = "ERR reading CAM memory";
     printMessage(message);
     server.send(200, "text/html", message);
-      delay(100);
-      return;
+    delay(200);
+    return;
   }
   static uint8_t buffer[bufferSize] = {0xFF};
   uint32_t full_length = start_request.length() + len + end_request.length();
-
   int loops = 1;
   myCAM.CS_LOW();
   myCAM.set_fifo_burst();
  
-      // Pure WiFi upload, no SPIFFS
-      if (client.connect(upload_host, 80) && onlineMode) { 
+  // Pure WiFi upload, no SPIFFS
+  if (client.connect(upload_host, 80) && onlineMode) { 
 
-      while(client.available()) {
-        String line = client.readStringUntil('\r');
-      }  // Empty wifi receive bufffer
-      u8cursor = 40;
-      //printMessage(String(full_length/1024)+ " Kb jpeg");
-      //printMessage(String(upload_host));
-        client.println("POST "+String(upload_path)+" HTTP/1.1");
-        client.println("Host: "+String(upload_host));
-        client.println("Content-Type: multipart/form-data; boundary="+boundary);
-        client.print("Content-Length: "); client.println(full_length);
-        client.println();
-        client.print(start_request);
-      _md5.begin();
-      loops = 1;
+    while(client.available()) {
+      String line = client.readStringUntil('\r');
+    }  // Empty wifi receive bufffer
+    u8cursor = 40;
+    client.println("POST "+String(upload_path)+" HTTP/1.1");
+    client.println("Host: "+String(upload_host));
+    client.println("Content-Type: multipart/form-data; boundary="+boundary);
+    client.print("Content-Length: "); client.println(full_length);
+    client.println();
+    client.print(start_request);
+    _md5.begin();
+    loops = 1;
       
       while (len) {
           size_t will_copy = (len < bufferSize) ? len : bufferSize;
@@ -440,14 +436,13 @@ void serverCaptureWifi() {
           len -= will_copy;
           delay(0);
 
-          if (loops%20 == 0) {
-            int kbSent = (length-len)/1024;
-            itoa(kbSent, pb1, 10);
-            char progressBarMessage[sizeof(pb1) + 1];
-            sprintf(progressBarMessage, "%s kb WiFi", pb1);
-            progressBar(length-len, length, progressBarMessage);
-          }
-        //copied = copied+will_copy;
+          // if (loops%20 == 0) {
+          //   int kbSent = (length-len)/1024;
+          //   itoa(kbSent, pb1, 10);
+          //   char progressBarMessage[sizeof(pb1) + 1];
+          //   sprintf(progressBarMessage, "%s kb WiFi", pb1);
+          //   progressBar(length-len, length, progressBarMessage);
+          // }
         loops++;
     }
     client.println(end_request);
@@ -476,26 +471,21 @@ void serverCaptureWifi() {
     }
   }
  
-  String rx_line;
-  DynamicJsonBuffer jsonBuffer;
   // Skip response headers
-    while(client.available()) {
-    rx_line = client.readStringUntil('\r');
-    if (rx_line.length() <= 1) { 
-        break;
-      } 
-    }
+  while(client.available()) {
+    if (client.readStringUntil('\r').length() <= 1) { 
+      break;
+    } 
+  }
+  DynamicJsonBuffer jsonBuffer;
   JsonObject& json = jsonBuffer.parseObject(client);
   client.stop();
   _md5.calculate();
   _md5.getChars(camHash);
-  
-  //Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
   total_time = millis() - total_time;
   cameraOff();
 
-  
-  u8cursor = 90;
+  u8cursor = 75;
   printMessage(String(json.measureLength())+" JSON length", true);
   if (!json.success()) {
     tft.setTextColor(TFT_RED);
@@ -506,12 +496,13 @@ void serverCaptureWifi() {
     return;
   }
   
-  //json.printTo(Serial); // Only for debugging purpouses, may kill everything
   char imageUrl[300];
   char hash[33];
+  char folder[33];
   strcpy(imageUrl, json["url"]);
   strcpy(hash, json["hash"]);
-  
+  strcpy(folder, json["folder"]);
+
   if (json.containsKey("jpg")) {
     JsonArray& arr = json["jpg"];
     int c=0;
@@ -521,35 +512,35 @@ void serverCaptureWifi() {
       image[c] = strtol(tempx, NULL, 10); 
       c++;
     }
-
-    // Draw thumbnail coming from json
+    // Draw thumbnail coming from json:
     tftClearScreen();
     drawArrayJpeg(image, sizeof(image), 0, 11);
   }
-  String hashCheck = "<label style='color:red'>Image upload corrupted</label>";
-  //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Make comparison fail
-  Serial.println("cam HASH: " +String(camHash));
-  Serial.println("api HASH: " +String(hash));
   
-  if (strcmp(camHash, hash) == 0) {
-      hashCheck = "<label style='color:green'>Image verified: "+String(camHash)+"</label>";
-  } else {
-    printMessage("UP. CORRUPT"); // Repeat upload automatically?
-    server.send(200, "text/html", "<label style='color:red'>Upload error</label> File does not match Arducam picture in memory");
-    delay(100);
-    return;
+  if (debugMode){
+    json.printTo(Serial); // Only for debugging purpouses, may kill everything
+    Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
+    Serial.println("cam HASH: " +String(camHash));
+    Serial.println("api HASH: " +String(hash));
+    //strcpy(camHashChar, "12345678901234567890123456789012");//DEBUG: Force comparison fail
   }
   
-  if (onlineMode) {
-    // cameraWiFI
+  String hashCheck;
+  if (strcmp(camHash, hash) == 0) {
+    hashCheck = "<label style='color:green'>Image verified: "+String(camHash)+"</label>";
     int tookSeconds = total_time/1000;
     tft.setTextColor(TFT_GREEN);
-    printMessage("UPLOAD OK", true);
-    printMessage(String(tookSeconds)+" seconds", true);
-    
+    printMessage("UPLOAD OK: "+String(length/1024)+ " Kb");
+    printMessage("Took "+String(tookSeconds)+" seconds");
+    printMessage("Folder: "+String(folder));
     server.send(200, "text/html", "<div id='m'><small>"+String(hashCheck)+"<br>"+String(imageUrl)+
               "</small><br><img src='"+String(imageUrl)+"' width='400'></div>"+ javascriptFadeMessage);
+  } else {
+    hashCheck = "<label style='color:red'>Image upload corrupted</label>";
+    printMessage("UPLOAD CORRUPT"); // Repeat upload automatically?
+    server.send(200, "text/html", "<label style='color:red'>Upload error</label> File does not match Arducam picture in memory");
   }
+  return;
 }
 
 void serverCaptureSpiffsWifi() {
@@ -778,23 +769,26 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   digitalWrite(ledStatus, HIGH);
   message = "CAM can't get online. Entering config mode. Please connect to access point "+String(configModeAP);
   delay(500);
-  printMessage("CAM offline",true,true);
+  printMessage("CAM offline", true, true);
   printMessage("connect to ");
   printMessage(String(configModeAP));
+  delay(5000);
+  return;
 }
 
 void saveConfigCallback() {
   memory.resetWifiSettings = false;
   EEPROM_writeAnything(0, memory);
   shouldSaveConfig = true;
-  printMessage("Saving config", true);
+  printMessage("Saving config", true, true);
+  delay(5000);
+  return;
 }
 
 void saveParamCallback(){
   shouldSaveConfig = true;
-  delay(100);
   wm.stopConfigPortal();
-  Serial.println("[CALLBACK] saveParamCallback fired -> should save config is TRUE");
+  if (debugMode) Serial.println("[CALLBACK] saveParamCallback fired -> should save config is TRUE");
 }
 
 void shutterPing() {
@@ -851,7 +845,7 @@ void shutterReleased() {
 }
 
 void serverDeepSleep() {
-  printMessage("Deep sleep");
+  printMessage("Deep sleep", true, true);
   esp_sleep_pd_config(ESP_PD_DOMAIN_MAX, ESP_PD_OPTION_OFF);
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
@@ -867,14 +861,15 @@ void serverDeepSleep() {
 
 void cameraInit() {
   int waitMs = 700;
-  Serial.println("cameraInit() _exposure: "+String(cameraSetExposure)+" waitMS: "+String(waitMs));
+  if (debugMode) Serial.println("cameraInit() _exposure: "+String(cameraSetExposure)+" waitMS: "+String(waitMs));
   if (strcmp(camera_mosfet, "0") == 0) {
     // Set back the selected resolution
     myCAM.clear_bit(ARDUCHIP_GPIO,GPIO_PWDN_MASK); // Clear out low power flag
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
     // Set Exposure many times does not work and will make a corrupt and big JPG
     myCAM.OV5642_set_Exposure_level(cameraSetExposure);
-    delay(150);
+    if (photoCounter == 0) delay(300);
+    delay(100);
     return;
   }
   digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
