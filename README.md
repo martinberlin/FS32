@@ -1,6 +1,11 @@
 # FS32
 ## ESP32 WiFi powered digital Camera
 
+**Branch: tft-7735** is an experimental version that uses a Color TFT display to render a JPG thumbnail that comes as a response from the Upload endpoint. 
+Note: As a fist approach I connected this SPI display to share same MOSI, MISO and CLK with Arducam. So unless the camera SPI is using another interface, like HSPI, is not possible to send something to the display in the moment we are reading the cameras memory. I didn't find the time yet to soldier and try to instance the SPI interface in HSPI but it would be great to have them working independantly from each other. 
+Example instancing 2 SPI buses: https://github.com/espressif/arduino-esp32/blob/master/libraries/SPI/examples/SPI_Multiple_Buses/SPI_Multiple_Buses.ino
+I hit the limit at least using this ESP32 (Wemos Lolin32) of DynamicJson buffer. Any JSON bigger than 8 Kb delivers a parser error, so in this cases no thumbnail is displayed (Although picture upload may be successful)
+
 ### The FS32 is a digital Polaroid that uploads the photo instantly to the cloud
 This project serves as a base to explore Arducam possibilities in combination with a WiFI ESP32 "System on a Chip" to create a simple WiFi point-and-shoot digital camera.
 
