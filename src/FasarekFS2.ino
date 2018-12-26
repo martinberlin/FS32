@@ -510,6 +510,7 @@ void serverCaptureWifi() {
   char imageUrl[300];
   char hash[33];
   char folder[33];
+  // WARNING If the json does not contain any of this properties then ESP will reboot
   strcpy(imageUrl, json["url"]);
   strcpy(hash, json["hash"]);
   strcpy(folder, json["folder"]);
