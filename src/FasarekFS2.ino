@@ -404,7 +404,7 @@ String camCaptureWifi(ArduCAM myCAM) {
           // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
           SPI.transfer(buffer, will_copy);
           // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
-          if ((loops == 1) && (buffer[0] != 255) && (buffer[1] = 216)) {
+          if ((loops == 1) && (buffer[0] != 255) && (buffer[1] != 216)) {
             client.stop();
             printMessage("JPEG corrupt", true);
             printMessage("Abort transfer", true);
@@ -642,7 +642,7 @@ void serverCaptureSpiffsWifi() {
     while (len) {
         size_t will_copy = (len < bufferSize) ? len : bufferSize;
         fsFile.read(bufferW, will_copy);
-        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] = 216)) {
+        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] != 216)) {
           client.stop();
           printMessage("JPEG corrupt", true);
         }
@@ -1027,7 +1027,7 @@ String wifiUploadFromSpiff() {
         size_t will_copy = (len < bufferSize) ? len : bufferSize;
         fsFile.read(bufferW, will_copy);
 
-        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] = 216)) {
+        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] != 216)) {
           //Serial.println("b0: "+String(bufferW[0]));
           //Serial.println("b1: "+String(bufferW[1]));
           client.stop();
