@@ -1,6 +1,8 @@
 typedef unsigned char byte;
 // Return the minimum of two values a and b
 #define minimum(a,b)     (((a) < (b)) ? (a) : (b))
+#define cbi(reg, bitmask) digitalWrite(bitmask, LOW)
+#define sbi(reg, bitmask) digitalWrite(bitmask, HIGH)
 
 template <class T> int EEPROM_writeAnything(int ee, const T& value)
 {
@@ -60,11 +62,6 @@ void printMessage(String message, bool newline = true, bool displayClear = false
   }
   tft.setTextColor(TFT_BLUE);
   return;
-}
-
-void start_capture() {
-  myCAM.clear_fifo_flag();
-  myCAM.start_capture();
 }
 
 /**
@@ -206,4 +203,87 @@ void tftClearScreen(bool resetCursor = false){
   if (resetCursor) {
      u8cursor = u8newline;
   }
+}
+
+// ARDUCAM Camera helper functions
+void camBusWrite(int address,int value) {
+  //hspi->
+  cbi(P_CS, CS);
+  hspi->transfer(address);
+	hspi->transfer(value);
+  //SPI.transfer(address);
+	//SPI.transfer(value);
+  sbi(P_CS, CS);
+}
+
+uint8_t camBusRead(int address)
+{
+	uint8_t value;
+	cbi(P_CS, CS);
+  hspi->transfer(address);
+  value = hspi->transfer(0x00);
+  //SPI.transfer(address);
+  //value = SPI.transfer(0x00);
+  // take the SS pin high to de-select the chip:
+  sbi(P_CS, CS);
+  return value;
+}
+
+void camWriteReg(uint8_t addr, uint8_t data) {
+  camBusWrite(addr | 0x80, data);
+}
+
+uint8_t camReadReg(uint8_t addr)
+{
+	uint8_t data;
+	data = camBusRead(addr & 0x7F);
+  Serial.println(data, HEX); // Uncomment to see camera internal SPI bus reads
+	return data;
+}
+
+void camSetBit(uint8_t addr, uint8_t bit)
+{
+	uint8_t temp;
+	temp = camReadReg(addr);
+	camWriteReg(addr, temp | bit);
+}
+// Get corresponding bit status
+uint8_t camGetBit(uint8_t addr, uint8_t bit)
+{
+  uint8_t temp;
+  temp = camBusRead(addr);
+  temp = temp & bit;
+  return temp;
+}
+void camClearBit(uint8_t addr, uint8_t bit)
+{
+	uint8_t temp;
+	temp = camReadReg(addr);
+	camWriteReg(addr, temp & (~bit));
+}
+// Read bytes length from camera memory
+uint32_t camReadFifoLength(void)
+{
+	uint32_t len1,len2,len3,length=0;
+	len1 = camReadReg(FIFO_SIZE1);
+  len2 = camReadReg(FIFO_SIZE2);
+  len3 = camReadReg(FIFO_SIZE3) & 0x7f;
+  length = ((len3 << 16) | (len2 << 8) | len1) & 0x07fffff;
+	return length;	
+}
+void camSetFifoBurst() {
+  hspi->transfer(BURST_FIFO_READ);
+}
+void camClearFifoFlag() {
+  camWriteReg(ARDUCHIP_FIFO, FIFO_CLEAR_MASK);
+}
+void camStartCapture() {
+  camWriteReg(ARDUCHIP_FIFO, FIFO_START_MASK);
+}
+/**
+ * Deprecated
+ */
+void start_capture() {
+  camClearFifoFlag();
+  camStartCapture();
 }

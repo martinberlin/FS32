@@ -37,7 +37,7 @@ MD5Builder _md5;
 #include <JPEGDecoder.h>
 #include <TFT_eSPI.h>
 TFT_eSPI tft = TFT_eSPI();
-
+SPIClass * hspi = NULL;
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
@@ -142,13 +142,8 @@ void setup() {
   Serial.println("setup() xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
+  hspi = new SPIClass(HSPI);
 
-  tft.begin();
-  tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_BLUE);
-  tft.setCursor(0, u8cursor);
-  tft.print("Initialiting TFT");delay(2000);
   // Find out what are this PINS on ESP32 
   //Serial.print("MOSI:");Serial.println(MOSI);
   //Serial.print("MISO:");Serial.println(MISO);
@@ -296,8 +291,10 @@ void setup() {
   // myCAM.write_reg uses Wire for I2C communication
   Wire.begin();
   // int8_t sck, int8_t miso, int8_t mosi, int8_t ss
-  SPI.begin(16, 0, 4, CS);
-  SPI.setFrequency(4000000); //4MHz
+  hspi->begin(16, 0, 4, CS);
+  hspi->setFrequency(4000000);
+  //SPI.begin(16, 0, 4, CS);
+  //SPI.setFrequency(4000000); //4MHz
 
   if (String(jpeg_size) == "640x480") {
    jpeg_size_id = 1;
@@ -322,8 +319,8 @@ void setup() {
     printMessage("M0: Check SPI");
     Serial.println(">>>camera_mosfet is 0: starting OV5642 on setup()");
     //Check if the ArduCAM SPI bus is OK
-    myCAM.write_reg(ARDUCHIP_TEST1, 0x55);
-    temp = myCAM.read_reg(ARDUCHIP_TEST1);
+    camWriteReg(ARDUCHIP_TEST1, 0x55);
+    temp = camReadReg(ARDUCHIP_TEST1);
     if (temp != 0x55) {
       printMessage("ERR SPI: Check");
       printMessage("ArduCam wiring");
@@ -331,8 +328,8 @@ void setup() {
       serverDeepSleep();
     }
 
-    SPI.transfer(0x00);
-    myCAM.clear_bit(6, GPIO_PWDN_MASK); //disable low power
+    hspi->transfer(0x00);
+    camClearBit(6, GPIO_PWDN_MASK); //disable low power
     //Check if the camera module type is OV5642
     myCAM.wrSensorReg16_8(0xff, 0x01);
     myCAM.rdSensorReg16_8(12298, &vid);
@@ -347,13 +344,19 @@ void setup() {
       myCAM.OV5642_set_Compress_quality(camJpegQuality);
       myCAM.InitCAM();
       // ARDUCHIP_TIM, VSYNC_LEVEL_MASK
-      myCAM.write_reg(3, 2);   //VSYNC is active HIGH 
+      camWriteReg(3, 2);   //VSYNC is active HIGH 
     }
 
   } 
   cameraOff();
   
   // TFT Init #2 try
+    tft.begin();
+  tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_BLUE);
+  tft.setCursor(0, u8cursor);
+  tft.print("Initialiting TFT");delay(2000);
 
   printMessage("FS2 CAMERA READY", true, true);
   printMessage("");
@@ -385,18 +388,19 @@ void serverCaptureWifi() {
   printMessage("CAPTURING", true, true);
   start_capture();
   int total_time = millis();
-  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
-    delay(0);
+  while (!camGetBit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
+    delay(90);
   }
+  printMessage("CAPTURE DONE");
   /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
   if (onlineMode) {
     shutterPing();
   } 
   */
-  uint32_t len  = myCAM.read_fifo_length();
+  uint32_t len  = camReadFifoLength();
   uint32_t length = len;
   char pb1 [11];  // Sent Kb in progressBar
-  
+  printMessage("FIFO LEN: "+String(length));
   if (len == 0) {
     message = "ERR reading CAM memory";
     printMessage(message);
@@ -408,7 +412,7 @@ void serverCaptureWifi() {
   uint32_t full_length = start_request.length() + len + end_request.length();
   int loops = 1;
   myCAM.CS_LOW();
-  myCAM.set_fifo_burst();
+  camSetFifoBurst();
  
   // Pure WiFi upload, no SPIFFS
   if (client.connect(upload_host, 80) && onlineMode) { 
@@ -430,7 +434,8 @@ void serverCaptureWifi() {
           size_t will_copy = (len < bufferSize) ? len : bufferSize;
           // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
           //SPI.transfer(buffer, will_copy);
-          SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
+          //SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
+          hspi->transferBytes(&buffer[0], &buffer[0], will_copy);
           // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
           if ((loops == 1) && (buffer[0] != 255) && (buffer[1] != 216)) {
             client.stop();
@@ -877,7 +882,7 @@ void cameraInit() {
   if (debugMode) Serial.println("cameraInit() _exposure: "+String(cameraSetExposure)+" waitMS: "+String(waitMs));
   if (strcmp(camera_mosfet, "0") == 0) {
     // Set back the selected resolution
-    myCAM.clear_bit(ARDUCHIP_GPIO,GPIO_PWDN_MASK); // Clear out low power flag
+    camClearBit(ARDUCHIP_GPIO,GPIO_PWDN_MASK); // Clear out low power flag
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
     // Set Exposure many times does not work and will make a corrupt and big JPG
     myCAM.OV5642_set_Exposure_level(cameraSetExposure);
@@ -903,7 +908,7 @@ void cameraInit() {
 void cameraOff() {
   Serial.println("cameraOff()");
   if (strcmp(camera_mosfet, "0") == 0) {
-    myCAM.set_bit(ARDUCHIP_GPIO,GPIO_PWDN_MASK);
+    camSetBit(ARDUCHIP_GPIO,GPIO_PWDN_MASK);
     return;
   }
   digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
@@ -934,9 +939,9 @@ void serverStream() {
        Serial.print(String(counter)+" % NN Matched handleClient()");
     }
     start_capture();
-    while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
+    while (!camGetBit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
        // server.handleClient(); ?
-       delay(0);
+       delay(90);
     }
     size_t len = myCAM.read_fifo_length();
 
@@ -946,7 +951,7 @@ void serverStream() {
       continue;
     }
     myCAM.CS_LOW();
-    myCAM.set_fifo_burst();
+    camSetFifoBurst();
     response = "--frame\r\n";
     response += "Content-Type: image/jpeg\r\n\r\n";
     server.sendContent(response);
@@ -954,7 +959,7 @@ void serverStream() {
     while ( len-- )
     {
       temp_last = temp;
-      temp =  SPI.transfer(0x00);
+      temp =  hspi->transfer(0x00);
 
       //Read JPEG data from FIFO
       if ( (temp == 0xD9) && (temp_last == 0xFF) ) //If find the end ,break while,
@@ -979,7 +984,7 @@ void serverStream() {
           i = 0;
           buffer[i++] = temp;
           myCAM.CS_LOW();
-          myCAM.set_fifo_burst();
+          camSetFifoBurst();
         }
       }
       else if ((temp == 0xD8) & (temp_last == 0xFF))
