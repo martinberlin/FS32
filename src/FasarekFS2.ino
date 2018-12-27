@@ -44,8 +44,8 @@ TFT_eSPI tft = TFT_eSPI();
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 const byte gpioButton    = 0;                 // GPIO Shutter button (On press -> Ground)
-const byte  CS = 17;                          // set GPIO17 as the slave select for Camera SPI
-bool spiffsFirst = false;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
+const byte  CS = 15;                          // set GPIO as the slave select for Camera SPI
+bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 bool debugMode = false;
 byte photoCounter = 0;
@@ -290,7 +290,8 @@ void setup() {
   uint8_t temp;
   // myCAM.write_reg uses Wire for I2C communication
   Wire.begin();
-  SPI.begin();
+  // int8_t sck, int8_t miso, int8_t mosi, int8_t ss
+  SPI.begin(16, 0, 4, CS);
   SPI.setFrequency(4000000); //4MHz
 
   if (String(jpeg_size) == "640x480") {
@@ -431,7 +432,7 @@ void serverCaptureWifi() {
           //SPI.transfer(buffer, will_copy);
           SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
           // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
-          if ((loops == 1) && (buffer[0] != 255) && (buffer[1] = 216)) {
+          if ((loops == 1) && (buffer[0] != 255) && (buffer[1] != 216)) {
             client.stop();
             printMessage("JPEG corrupt", true);
             printMessage("Abort transfer", true);
@@ -644,7 +645,7 @@ void serverCaptureSpiffsWifi() {
     while (len) {
         size_t will_copy = (len < bufferSize) ? len : bufferSize;
         fsFile.read(bufferW, will_copy);
-        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] = 216)) {
+        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] != 216)) {
           client.stop();
           printMessage("JPEG corrupt", true);
         }
@@ -1027,7 +1028,7 @@ String wifiUploadFromSpiff() {
         size_t will_copy = (len < bufferSize) ? len : bufferSize;
         fsFile.read(bufferW, will_copy);
 
-        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] = 216)) {
+        if ((loops == 1) && (bufferW[0] != 255) && (bufferW[1] != 216)) {
           //Serial.println("b0: "+String(bufferW[0]));
           //Serial.println("b1: "+String(bufferW[1]));
           client.stop();
