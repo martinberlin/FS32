@@ -9,14 +9,13 @@
 //          Serial.print after  setup()  to use the right GPIOs
 // Definition for the ESP-32 Heltec:
 // CS   17  Camera CS. Check for conflicts with any other SPI (OLED, etc)
-// MOSI 23
-// MISO 19
-// SCK  18
+// MOSI  4
+// MISO  0
+// SCK  16
 // SDA  21
 // SCL  22
-// SHU  Shutter button : Update gpioButton to whenever thin GPIO connects to GND to take a picture
-// LED  12 ledStatus
-// OLED Display /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16
+// SHU      Update gpioButton to whenever thin GPIO connects to GND to take a picture
+// LED  12  ledStatus
 #include <Arduino.h>
 #include "FS.h"
 #include "SPIFFS.h"
@@ -43,11 +42,11 @@ TFT_eSPI tft = TFT_eSPI();
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
-const byte gpioButton    = 0;                 // GPIO Shutter button (On press -> Ground)
-const byte  CS = 15;                          // set GPIO as the slave select for Camera SPI
+const byte gpioButton    = 32;                 // GPIO Shutter button (On press -> Ground)
+const byte  CS = 17;                          // set GPIO as the slave select for Camera SPI
 bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
-bool debugMode = false;
+bool debugMode = true;
 byte photoCounter = 0;
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
@@ -143,7 +142,13 @@ void setup() {
   Serial.println("setup() xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
-    
+
+  tft.begin();
+  tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_BLUE);
+  tft.setCursor(0, u8cursor);
+  tft.print("Initialiting TFT");delay(2000);
   // Find out what are this PINS on ESP32 
   //Serial.print("MOSI:");Serial.println(MOSI);
   //Serial.print("MISO:");Serial.println(MISO);
@@ -348,13 +353,8 @@ void setup() {
   } 
   cameraOff();
   
-  // First foto comes out wrong using camera_mosfet:0 (No idea why, maybe not enough delay before first picture ?)
-  //cameraOff();
-  tft.begin();
-  tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_BLUE);
-  tft.setCursor(0, u8cursor);
+  // TFT Init #2 try
+
   printMessage("FS2 CAMERA READY", true, true);
   printMessage("");
   printMessage("Connected to:");
