@@ -142,8 +142,13 @@ void setup() {
   Serial.println("setup() xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
-  hspi = new SPIClass(HSPI);
+  // myCAM.write_reg uses Wire for I2C communication
+  Wire.begin();
 
+  hspi = new SPIClass(HSPI);
+  // int8_t sck, int8_t miso, int8_t mosi, int8_t ss
+  hspi->begin(16, 0, 4, CS);
+  hspi->setFrequency(4000000);
   // Find out what are this PINS on ESP32 
   //Serial.print("MOSI:");Serial.println(MOSI);
   //Serial.print("MISO:");Serial.println(MISO);
@@ -162,6 +167,13 @@ void setup() {
   // Read memory struct from EEPROM
   EEPROM_readAnything(0, memory);
 
+  tft.begin();
+  tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_GREENYELLOW);
+  tft.setCursor(0, u8cursor);
+  tft.print("Connecting to WiFi");delay(500);
+  tft.setTextColor(TFT_BLUE);
   // Read configuration from FS json
   if (SPIFFS.begin()) {
    if (SPIFFS.exists("/config.json")) {
@@ -288,13 +300,6 @@ void setup() {
   
   uint8_t vid, pid;
   uint8_t temp;
-  // myCAM.write_reg uses Wire for I2C communication
-  Wire.begin();
-  // int8_t sck, int8_t miso, int8_t mosi, int8_t ss
-  hspi->begin(16, 0, 4, CS);
-  hspi->setFrequency(4000000);
-  //SPI.begin(16, 0, 4, CS);
-  //SPI.setFrequency(4000000); //4MHz
 
   if (String(jpeg_size) == "640x480") {
    jpeg_size_id = 1;
@@ -316,7 +321,6 @@ void setup() {
   }
   // camera_mosfet on 0 means Camera stays on all the time
   if (strcmp(camera_mosfet,"0") == 0) {
-    printMessage("M0: Check SPI");
     Serial.println(">>>camera_mosfet is 0: starting OV5642 on setup()");
     //Check if the ArduCAM SPI bus is OK
     camWriteReg(ARDUCHIP_TEST1, 0x55);
@@ -349,14 +353,6 @@ void setup() {
 
   } 
   cameraOff();
-  
-  // TFT Init #2 try
-    tft.begin();
-  tft.setRotation(2);  // 0 & 2 Portrait. 1 & 3 landscape
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_BLUE);
-  tft.setCursor(0, u8cursor);
-  tft.print("Initialiting TFT");delay(2000);
 
   printMessage("FS2 CAMERA READY", true, true);
   printMessage("");
