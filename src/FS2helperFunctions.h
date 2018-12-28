@@ -89,7 +89,7 @@ void progressBar(long processed, long total, char *message) {
  int width = round( processed*100 / total );
  tft.fillRect(0, 50, width, 4, TFT_GREEN); 
  tft.fillRect(0, 54, 120, 20, TFT_BLACK); // Erase old message
- tft.drawString(message, 60, 60);         // (const String& string, int poX, int poY)
+ tft.drawString(message, 62, 60);         // (const String& string, int poX, int poY)
 }
 
 

@@ -385,7 +385,7 @@ void serverCaptureWifi() {
   start_capture();
   int total_time = millis();
   while (!camGetBit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
-    delay(90);
+    delay(10);
   }
   
   /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
@@ -916,8 +916,8 @@ void serverStopStream() {
 
 void serverStream() {
   cameraInit();
-  printMessage("STREAMING");
-  myCAM.OV5642_set_JPEG_size(1);
+  printMessage("STREAMING", true, true);
+  myCAM.OV5642_set_JPEG_size(0);
 
   WiFiClient client = server.client();
   String response = "HTTP/1.1 200 OK\r\n";
@@ -929,15 +929,14 @@ void serverStream() {
     // Use a handleClient only 1 every N times
     if (counter % 129 == 0) {
        server.handleClient();
-       Serial.print(String(counter)+" % NN Matched handleClient()");
+       //Serial.print(String(counter)+" % NN Matched handleClient()");
     }
     start_capture();
     while (!camGetBit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
-       // server.handleClient(); ?
-       delay(90);
+       delay(10);
     }
-    size_t len = myCAM.read_fifo_length();
-
+    size_t len = camReadFifoLength();
+    Serial.println(len);
     if (len == 0 ) //0 kb
     {
       Serial.println(F("Size is 0."));
@@ -961,6 +960,7 @@ void serverStream() {
         //Write the remain bytes in the buffer
         myCAM.CS_HIGH();
         client.write(&buffer[0], i);
+        //drawArrayJpeg(buffer, sizeof(buffer), 0, 0); // Image too big (128x128 display)
         is_header = false;
         i = 0;
       }
