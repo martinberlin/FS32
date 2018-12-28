@@ -77,7 +77,6 @@ String boundary = "_cam_";
 String end_request = "\n--"+boundary+"--\n";
 
 uint8_t temp = 0, temp_last = 0;
-int i = 0;
 bool is_header = false;
 
 // Fixed to a OV5642
@@ -135,7 +134,7 @@ void defineServerRouting() {
     server.begin();
 }
 char camHash[33];
-static unsigned char image[4000] PROGMEM;
+static unsigned char image[8000] PROGMEM;
 
 void setup() {
   Serial.begin(115200);
@@ -924,6 +923,9 @@ void serverStream() {
   response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
   server.sendContent(response);
   int counter = 0;
+  int i = 0;
+  int ix = 0;
+
   while (true) {
     counter++;
     // Use a handleClient only 1 every N times
@@ -936,7 +938,7 @@ void serverStream() {
        delay(10);
     }
     size_t len = camReadFifoLength();
-    Serial.println(len);
+    //Serial.println(len);
     if (len == 0 ) //0 kb
     {
       Serial.println(F("Size is 0."));
@@ -947,7 +949,8 @@ void serverStream() {
     response = "--frame\r\n";
     response += "Content-Type: image/jpeg\r\n\r\n";
     server.sendContent(response);
-    
+    ix = 0;
+    // while exits when len is 0
     while ( len-- )
     {
       temp_last = temp;
@@ -957,25 +960,27 @@ void serverStream() {
       if ( (temp == 0xD9) && (temp_last == 0xFF) ) //If find the end ,break while,
       {
         buffer[i++] = temp;  //save the last  0XD9
+        image[ix++] = temp;
         //Write the remain bytes in the buffer
         myCAM.CS_HIGH();
         client.write(&buffer[0], i);
-        //drawArrayJpeg(buffer, sizeof(buffer), 0, 0); // Image too big (128x128 display)
+        drawArrayJpeg(image, sizeof(image), 0, 0); // Image too big (128x128 display)
         is_header = false;
         i = 0;
       }
       if (is_header == true)
       {
         //Write image data to buffer if not full
-        if (i < bufferSize)
+        if (i < bufferSize) {
           buffer[i++] = temp;
-        else
-        {
+          image[ix++] = temp;
+          } else {
           //Write bufferSize bytes image data to file
           myCAM.CS_HIGH();
           client.write(&buffer[0], bufferSize);
           i = 0;
           buffer[i++] = temp;
+          image[ix++] = temp;
           myCAM.CS_LOW();
           camSetFifoBurst();
         }
@@ -985,6 +990,8 @@ void serverStream() {
         is_header = true;
         buffer[i++] = temp_last;
         buffer[i++] = temp;
+        image[ix++] = temp_last;
+        image[ix++] = temp;
       }
     }
     if (!client.connected()) {
