@@ -86,11 +86,10 @@ String IpAddress2String(const IPAddress& ipAddress)
 }
 
 void progressBar(long processed, long total, char *message) {
- int width = round( processed*128 / total );
- /* u8g2.drawBox(127, 1,  1, 4);  // end of upload
- u8g2.drawBox(0, 1, width, 4);
- u8g2.drawStr(0, 18, message);
- u8g2.sendBuffer(); */
+ int width = round( processed*100 / total );
+ tft.fillRect(0, 50, width, 4, TFT_GREEN); 
+ tft.fillRect(0, 54, 120, 20, TFT_BLACK); // Erase old message
+ tft.drawString(message, 80, 60);         // (const String& string, int poX, int poY)
 }
 
 

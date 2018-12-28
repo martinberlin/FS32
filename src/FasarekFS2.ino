@@ -42,7 +42,7 @@ SPIClass * hspi = NULL;
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
-const byte gpioButton    = 32;                 // GPIO Shutter button (On press -> Ground)
+const byte gpioButton    = 1;                // GPIO Shutter button (On press -> Ground)
 const byte  CS = 17;                          // set GPIO as the slave select for Camera SPI
 bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
@@ -391,7 +391,7 @@ void serverCaptureWifi() {
   while (!camGetBit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
     delay(90);
   }
-  printMessage("CAPTURE DONE");
+  
   /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
   if (onlineMode) {
     shutterPing();
@@ -399,8 +399,9 @@ void serverCaptureWifi() {
   */
   uint32_t len  = camReadFifoLength();
   uint32_t length = len;
+  printMessage("Uploading "+String(length/1024)+" Kb", true);
   char pb1 [11];  // Sent Kb in progressBar
-  printMessage("FIFO LEN: "+String(length));
+  
   if (len == 0) {
     message = "ERR reading CAM memory";
     printMessage(message);
@@ -432,9 +433,7 @@ void serverCaptureWifi() {
       
       while (len) {
           size_t will_copy = (len < bufferSize) ? len : bufferSize;
-          // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
           //SPI.transfer(buffer, will_copy);
-          //SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
           hspi->transferBytes(&buffer[0], &buffer[0], will_copy);
           // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
           if ((loops == 1) && (buffer[0] != 255) && (buffer[1] != 216)) {
@@ -446,20 +445,19 @@ void serverCaptureWifi() {
             return;
           }
           _md5.add(buffer, will_copy);
-          //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
           if (client.connected()) {
-            client.write(buffer, will_copy); //&buffer[0]
+            client.write(buffer, will_copy);
           }
           len -= will_copy;
           delay(0);
 
-          // if (loops%20 == 0) {
-          //   int kbSent = (length-len)/1024;
-          //   itoa(kbSent, pb1, 10);
-          //   char progressBarMessage[sizeof(pb1) + 1];
-          //   sprintf(progressBarMessage, "%s kb WiFi", pb1);
-          //   progressBar(length-len, length, progressBarMessage);
-          // }
+          if (loops%20 == 0) {
+            int kbSent = (length-len)/1024;
+            itoa(kbSent, pb1, 10);
+            char progressBarMessage[sizeof(pb1) + 1];
+            sprintf(progressBarMessage, "%s kb   ", pb1);
+            progressBar(length-len, length, progressBarMessage);
+          }
         loops++;
     }
     client.println(end_request);
@@ -472,7 +470,6 @@ void serverCaptureWifi() {
       delay(100);
       return;
     }
-  Serial.println("myCAM.CS_HIGH()");
   myCAM.CS_HIGH();
   
   // Read all the lines of the reply from server and print them to Serial
@@ -503,7 +500,6 @@ void serverCaptureWifi() {
   cameraOff();
 
   u8cursor = 75;
-  printMessage(String(json.measureLength())+" JSON length", true);
   if (!json.success()) {
     tft.setTextColor(TFT_RED);
     printMessage("JSON parse failed", true, true);
@@ -536,6 +532,7 @@ void serverCaptureWifi() {
   }
   
   if (debugMode){
+    Serial.println(String(json.measureLength())+" JSON length");
     json.printTo(Serial); // Only for debugging purpouses, may kill everything
     Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" returning to serverCapture"); 
     Serial.println("cam HASH: " +String(camHash));
