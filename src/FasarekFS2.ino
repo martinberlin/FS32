@@ -172,7 +172,7 @@ void setup() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_GREENYELLOW);
   tft.setCursor(0, u8cursor);
-  tft.print("Connecting to WiFi");delay(500);
+  tft.print("Connecting to WiFi");
   tft.setTextColor(TFT_BLUE);
   // Read configuration from FS json
   if (SPIFFS.begin()) {
