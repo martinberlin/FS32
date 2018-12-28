@@ -46,7 +46,7 @@ const byte gpioButton    = 1;                // GPIO Shutter button (On press ->
 const byte  CS = 17;                          // set GPIO as the slave select for Camera SPI
 bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
-bool debugMode = true;
+bool debugMode = false;
 byte photoCounter = 0;
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
@@ -134,7 +134,7 @@ void defineServerRouting() {
     server.begin();
 }
 char camHash[33];
-static unsigned char image[8000] PROGMEM;
+static unsigned char image[18000] PROGMEM; // Was 4000
 
 void setup() {
   Serial.begin(115200);
@@ -931,17 +931,17 @@ void serverStream() {
     // Use a handleClient only 1 every N times
     if (counter % 129 == 0) {
        server.handleClient();
-       //Serial.print(String(counter)+" % NN Matched handleClient()");
+       if (debugMode) Serial.print(String(counter)+" % NN Matched handleClient()");
     }
-    start_capture();
+    camClearFifoFlag();
+    camStartCapture();
     while (!camGetBit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
-       delay(10);
+       delay(1);
     }
     size_t len = camReadFifoLength();
-    //Serial.println(len);
-    if (len == 0 ) //0 kb
-    {
-      Serial.println(F("Size is 0."));
+    Serial.println("Stream Kb:"+String(len/1024));
+    if (len == 0 ) {
+      Serial.println("Size is 0.");
       continue;
     }
     myCAM.CS_LOW();
@@ -949,7 +949,10 @@ void serverStream() {
     response = "--frame\r\n";
     response += "Content-Type: image/jpeg\r\n\r\n";
     server.sendContent(response);
+ 
     ix = 0;
+    image[0] = 0;
+    
     // while exits when len is 0
     while ( len-- )
     {
@@ -964,7 +967,7 @@ void serverStream() {
         //Write the remain bytes in the buffer
         myCAM.CS_HIGH();
         client.write(&buffer[0], i);
-        drawArrayJpeg(image, sizeof(image), 0, 0); // Image too big (128x128 display)
+        drawArrayJpeg(image, ix, 0, 0); // Image too big (128x128 display)
         is_header = false;
         i = 0;
       }
@@ -993,10 +996,15 @@ void serverStream() {
         image[ix++] = temp_last;
         image[ix++] = temp;
       }
+      delay(0);
+      yield();
     }
+
     if (!client.connected()) {
       client.stop(); is_header = false; break;
     }
+    delay(1);
+    yield();
   }
   cameraOff();
 }

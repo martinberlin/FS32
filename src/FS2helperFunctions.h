@@ -172,22 +172,28 @@ void renderJPEG(int xpos, int ypos) {
   drawTime = millis() - drawTime;
 
   // print the results to the serial port
-  Serial.print(F(  "Total render time was    : ")); Serial.print(drawTime); Serial.println(F(" ms"));
-  Serial.println(F(""));
+  //Serial.print(F(  "Total render time was    : ")); Serial.print(drawTime); Serial.println(F(" ms"));
+  
+}
+
+void jpegInfo() {
+  Serial.println("===============");
+  Serial.print  ("Components :"); Serial.println(JpegDec.comps);
+  Serial.print  ("MCU / row  :"); Serial.println(JpegDec.MCUSPerRow);
+  Serial.print  ("MCU / col  :"); Serial.println(JpegDec.MCUSPerCol);
+  Serial.print  ("Scan type  :"); Serial.println(JpegDec.scanType);
+  Serial.print  ("MCU width  :"); Serial.println(JpegDec.MCUWidth);
+  Serial.print  ("MCU height :"); Serial.println(JpegDec.MCUHeight);
 }
 
 //####################################################################################################
 // Draw a JPEG on the TFT pulled from a program memory array
 //####################################################################################################
 void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int ypos) {
-
   int x = xpos;
   int y = ypos;
-
   JpegDec.decodeArray(arrayname, array_size);
-  
   //jpegInfo(); // Print information from the JPEG file (could comment this line out)
-  
   renderJPEG(x, y);
 }
 
@@ -206,12 +212,9 @@ void tftClearScreen(bool resetCursor = false){
 
 // ARDUCAM Camera helper functions
 void camBusWrite(int address,int value) {
-  //hspi->
   cbi(P_CS, CS);
   hspi->transfer(address);
 	hspi->transfer(value);
-  //SPI.transfer(address);
-	//SPI.transfer(value);
   sbi(P_CS, CS);
 }
 
@@ -221,8 +224,6 @@ uint8_t camBusRead(int address)
 	cbi(P_CS, CS);
   hspi->transfer(address);
   value = hspi->transfer(0x00);
-  //SPI.transfer(address);
-  //value = SPI.transfer(0x00);
   // take the SS pin high to de-select the chip:
   sbi(P_CS, CS);
   return value;
@@ -236,7 +237,7 @@ uint8_t camReadReg(uint8_t addr)
 {
 	uint8_t data;
 	data = camBusRead(addr & 0x7F);
-  Serial.println(data, HEX); // Uncomment to see camera internal SPI bus reads
+  if (debugMode) Serial.println(data, HEX); // See camera internal SPI bus reads
 	return data;
 }
 
