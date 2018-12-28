@@ -513,13 +513,13 @@ void serverCaptureWifi() {
   strcpy(hash, json["hash"]);
   strcpy(folder, json["folder"]);
 
+  // serverCaptureWifi()
   if (json.containsKey("jpg")) {
     JsonArray& arr = json["jpg"];
-    int c=0;
+    int c = 0;
     const char* tempx;
     for (auto value : arr) {
-      tempx = value.as<char*>();
-      image[c] = strtol(tempx, NULL, 10); 
+      image[c] = value.as<unsigned int>();
       c++;
     }
     // Draw thumbnail coming from json:
