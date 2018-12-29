@@ -1,63 +1,79 @@
 typedef unsigned char byte;
 // Return the minimum of two values a and b
-#define minimum(a,b)     (((a) < (b)) ? (a) : (b))
+#define minimum(a, b) (((a) < (b)) ? (a) : (b))
 #define cbi(reg, bitmask) digitalWrite(bitmask, LOW)
 #define sbi(reg, bitmask) digitalWrite(bitmask, HIGH)
 
-template <class T> int EEPROM_writeAnything(int ee, const T& value)
+template <class T>
+int EEPROM_writeAnything(int ee, const T &value)
 {
-    const byte* p = (const byte*)(const void*)&value;
-    int i;
-    for (i = 0; i < sizeof(value); i++)
+  const byte *p = (const byte *)(const void *)&value;
+  int i;
+  for (i = 0; i < sizeof(value); i++)
     EEPROM.put(ee++, *p++);
-    EEPROM.commit();
-    return i;
+  EEPROM.commit();
+  return i;
 }
 
-template <class T> int EEPROM_readAnything(int ee, T& value)
+template <class T>
+int EEPROM_readAnything(int ee, T &value)
 {
-    byte* p = (byte*)(void*)&value;
-    int i;
-    for (i = 0; i < sizeof(value); i++)
+  byte *p = (byte *)(void *)&value;
+  int i;
+  for (i = 0; i < sizeof(value); i++)
     *p++ = EEPROM.read(ee++);
-    return i;
+  return i;
 }
 
-String getContentType(String filename) {
-  if (server.hasArg("download")) {
+String getContentType(String filename)
+{
+  if (server.hasArg("download"))
+  {
     return "application/octet-stream";
   }
-  if (filename.endsWith(".json")) {
+  if (filename.endsWith(".json"))
+  {
     return "application/json";
-  } else if (filename.endsWith(".html")) {
+  }
+  else if (filename.endsWith(".html"))
+  {
     return "text/html";
-  } else if (filename.endsWith(".css")) {
+  }
+  else if (filename.endsWith(".css"))
+  {
     return "text/css";
-  } else if (filename.endsWith(".js")) {
+  }
+  else if (filename.endsWith(".js"))
+  {
     return "application/javascript";
-  } 
+  }
   return "text/plain";
 }
 
 /**
  * Generic message printer. Modify this if you want to send this messages elsewhere (Display)
  */
-void printMessage(String message, bool newline = true, bool displayClear = false) {
-  if (debugMode) Serial.println(message);
-  if (displayClear) {
+void printMessage(String message, bool newline = true, bool displayClear = false)
+{
+  if (debugMode)
+    Serial.println(message);
+  if (displayClear)
+  {
     // Clear buffer and reset cursor to first line
-    tft.fillScreen(TFT_BLACK); 
+    tft.fillScreen(TFT_BLACK);
     u8cursor = u8newline;
   }
-  if (newline) {
-    u8cursor = u8cursor+u8newline;
+  if (newline)
+  {
+    u8cursor = u8cursor + u8newline;
   }
-  
+
   tft.setCursor(2, u8cursor);
   tft.print(message);
-  
-  u8cursor = u8cursor+u8newline;
-  if (u8cursor > 120) {
+
+  u8cursor = u8cursor + u8newline;
+  if (u8cursor > 120)
+  {
     u8cursor = u8newline;
   }
   tft.setTextColor(TFT_BLUE);
@@ -67,38 +83,40 @@ void printMessage(String message, bool newline = true, bool displayClear = false
 /**
  * Update camera settings (Effects / Exposure only on OV5642)
  */
-void serverCameraSettings() {
+void serverCameraSettings()
+{
   String argument = server.argName(0);
   String setValue = server.arg(0);
   cameraSetExposure = setValue.toInt();
-  server.send(200, "text/html", "<div id='m'>"+argument+" updated to value "+setValue+"<br>See it on effect on next photo</div>"+ javascriptFadeMessage);
+  server.send(200, "text/html", "<div id='m'>" + argument + " updated to value " + setValue + "<br>See it on effect on next photo</div>" + javascriptFadeMessage);
 }
 
 /**
  * Convert the IP to string so we can send the display
  */
-String IpAddress2String(const IPAddress& ipAddress)
+String IpAddress2String(const IPAddress &ipAddress)
 {
-  return String(ipAddress[0]) + String(".") +\
-  String(ipAddress[1]) + String(".") +\
-  String(ipAddress[2]) + String(".") +\
-  String(ipAddress[3])  ;
+  return String(ipAddress[0]) + String(".") +
+         String(ipAddress[1]) + String(".") +
+         String(ipAddress[2]) + String(".") +
+         String(ipAddress[3]);
 }
 
-void progressBar(long processed, long total, char *message) {
- int width = round( processed*100 / total );
- tft.fillRect(0, 50, width, 4, TFT_GREEN); 
- tft.fillRect(0, 54, 120, 20, TFT_BLACK); // Erase old message
- tft.drawString(message, 62, 60);         // (const String& string, int poX, int poY)
+void progressBar(long processed, long total, char *message)
+{
+  int width = round(processed * 100 / total);
+  tft.fillRect(0, 50, width, 4, TFT_GREEN);
+  tft.fillRect(0, 54, 120, 20, TFT_BLACK); // Erase old message
+  tft.drawString(message, 62, 60);         // (const String& string, int poX, int poY)
 }
-
 
 //####################################################################################################
 // Draw a JPEG on the TFT, images will be cropped on the right/bottom sides if they do not fit
 //####################################################################################################
 // This function assumes xpos,ypos is a valid screen coordinate. For convenience images that do not
 // fit totally on the screen are cropped to the nearest MCU size and may leave right/bottom borders.
-void renderJPEG(int xpos, int ypos) {
+void renderJPEG(int xpos, int ypos)
+{
 
   // retrieve infomration about the image
   uint16_t *pImg;
@@ -126,22 +144,27 @@ void renderJPEG(int xpos, int ypos) {
   max_y += ypos;
 
   // read each MCU block until there are no more
-  while (JpegDec.readSwappedBytes()) {
-	  
+  while (JpegDec.readSwappedBytes())
+  {
+
     // save a pointer to the image block
-    pImg = JpegDec.pImage ;
+    pImg = JpegDec.pImage;
 
     // calculate where the image block should be drawn on the screen
-    int mcu_x = JpegDec.MCUx * mcu_w + xpos;  // Calculate coordinates of top left corner of current MCU
+    int mcu_x = JpegDec.MCUx * mcu_w + xpos; // Calculate coordinates of top left corner of current MCU
     int mcu_y = JpegDec.MCUy * mcu_h + ypos;
 
     // check if the image block size needs to be changed for the right edge
-    if (mcu_x + mcu_w <= max_x) win_w = mcu_w;
-    else win_w = min_w;
+    if (mcu_x + mcu_w <= max_x)
+      win_w = mcu_w;
+    else
+      win_w = min_w;
 
     // check if the image block size needs to be changed for the bottom edge
-    if (mcu_y + mcu_h <= max_y) win_h = mcu_h;
-    else win_h = min_h;
+    if (mcu_y + mcu_h <= max_y)
+      win_h = mcu_h;
+    else
+      win_h = min_h;
 
     // copy pixels into a contiguous block
     if (win_w != mcu_w)
@@ -161,11 +184,12 @@ void renderJPEG(int xpos, int ypos) {
     }
 
     // draw image MCU block only if it will fit on the screen
-    if (( mcu_x + win_w ) <= tft.width() && ( mcu_y + win_h ) <= tft.height())
+    if ((mcu_x + win_w) <= tft.width() && (mcu_y + win_h) <= tft.height())
     {
       tft.pushRect(mcu_x, mcu_y, win_w, win_h, pImg);
     }
-    else if ( (mcu_y + win_h) >= tft.height()) JpegDec.abort(); // Image has run off bottom of screen so abort decoding
+    else if ((mcu_y + win_h) >= tft.height())
+      JpegDec.abort(); // Image has run off bottom of screen so abort decoding
   }
 
   // calculate how long it took to draw the image
@@ -173,23 +197,30 @@ void renderJPEG(int xpos, int ypos) {
 
   // print the results to the serial port
   //Serial.print(F(  "Total render time was    : ")); Serial.print(drawTime); Serial.println(F(" ms"));
-  
 }
 
-void jpegInfo() {
+void jpegInfo()
+{
   Serial.println("===============");
-  Serial.print  ("Components :"); Serial.println(JpegDec.comps);
-  Serial.print  ("MCU / row  :"); Serial.println(JpegDec.MCUSPerRow);
-  Serial.print  ("MCU / col  :"); Serial.println(JpegDec.MCUSPerCol);
-  Serial.print  ("Scan type  :"); Serial.println(JpegDec.scanType);
-  Serial.print  ("MCU width  :"); Serial.println(JpegDec.MCUWidth);
-  Serial.print  ("MCU height :"); Serial.println(JpegDec.MCUHeight);
+  Serial.print("Components :");
+  Serial.println(JpegDec.comps);
+  Serial.print("MCU / row  :");
+  Serial.println(JpegDec.MCUSPerRow);
+  Serial.print("MCU / col  :");
+  Serial.println(JpegDec.MCUSPerCol);
+  Serial.print("Scan type  :");
+  Serial.println(JpegDec.scanType);
+  Serial.print("MCU width  :");
+  Serial.println(JpegDec.MCUWidth);
+  Serial.print("MCU height :");
+  Serial.println(JpegDec.MCUHeight);
 }
 
 //####################################################################################################
 // Draw a JPEG on the TFT pulled from a program memory array
 //####################################################################################################
-void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int ypos) {
+void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int ypos)
+{
   int x = xpos;
   int y = ypos;
   JpegDec.decodeArray(arrayname, array_size);
@@ -197,31 +228,36 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
   renderJPEG(x, y);
 }
 
-void tftSleep() { 
-  tft.writecommand(ST7735_SLPIN); 
+void tftSleep()
+{
+  tft.writecommand(ST7735_SLPIN);
 }
-void tftWake() { 
-  tft.writecommand(ST7735_SLPOUT); 
+void tftWake()
+{
+  tft.writecommand(ST7735_SLPOUT);
 }
-void tftClearScreen(bool resetCursor = false){
-  tft.fillScreen(TFT_BLACK); 
-  if (resetCursor) {
-     u8cursor = u8newline;
+void tftClearScreen(bool resetCursor = false)
+{
+  tft.fillScreen(TFT_BLACK);
+  if (resetCursor)
+  {
+    u8cursor = u8newline;
   }
 }
 
 // ARDUCAM Camera helper functions
-void camBusWrite(int address,int value) {
+void camBusWrite(int address, int value)
+{
   cbi(P_CS, CS);
   hspi->transfer(address);
-	hspi->transfer(value);
+  hspi->transfer(value);
   sbi(P_CS, CS);
 }
 
 uint8_t camBusRead(int address)
 {
-	uint8_t value;
-	cbi(P_CS, CS);
+  uint8_t value;
+  cbi(P_CS, CS);
   hspi->transfer(address);
   value = hspi->transfer(0x00);
   // take the SS pin high to de-select the chip:
@@ -229,23 +265,25 @@ uint8_t camBusRead(int address)
   return value;
 }
 
-void camWriteReg(uint8_t addr, uint8_t data) {
+void camWriteReg(uint8_t addr, uint8_t data)
+{
   camBusWrite(addr | 0x80, data);
 }
 
 uint8_t camReadReg(uint8_t addr)
 {
-	uint8_t data;
-	data = camBusRead(addr & 0x7F);
-  if (debugMode) Serial.println(data, HEX); // See camera internal SPI bus reads
-	return data;
+  uint8_t data;
+  data = camBusRead(addr & 0x7F);
+  if (debugMode)
+    Serial.println(data, HEX); // See camera internal SPI bus reads
+  return data;
 }
 
 void camSetBit(uint8_t addr, uint8_t bit)
 {
-	uint8_t temp;
-	temp = camReadReg(addr);
-	camWriteReg(addr, temp | bit);
+  uint8_t temp;
+  temp = camReadReg(addr);
+  camWriteReg(addr, temp | bit);
 }
 // Get corresponding bit status
 uint8_t camGetBit(uint8_t addr, uint8_t bit)
@@ -257,33 +295,37 @@ uint8_t camGetBit(uint8_t addr, uint8_t bit)
 }
 void camClearBit(uint8_t addr, uint8_t bit)
 {
-	uint8_t temp;
-	temp = camReadReg(addr);
-	camWriteReg(addr, temp & (~bit));
+  uint8_t temp;
+  temp = camReadReg(addr);
+  camWriteReg(addr, temp & (~bit));
 }
 // Read bytes length from camera memory
 uint32_t camReadFifoLength(void)
 {
-	uint32_t len1,len2,len3,length=0;
-	len1 = camReadReg(FIFO_SIZE1);
+  uint32_t len1, len2, len3, length = 0;
+  len1 = camReadReg(FIFO_SIZE1);
   len2 = camReadReg(FIFO_SIZE2);
   len3 = camReadReg(FIFO_SIZE3) & 0x7f;
   length = ((len3 << 16) | (len2 << 8) | len1) & 0x07fffff;
-	return length;	
+  return length;
 }
-void camSetFifoBurst() {
+void camSetFifoBurst()
+{
   hspi->transfer(BURST_FIFO_READ);
 }
-void camClearFifoFlag() {
+void camClearFifoFlag()
+{
   camWriteReg(ARDUCHIP_FIFO, FIFO_CLEAR_MASK);
 }
-void camStartCapture() {
+void camStartCapture()
+{
   camWriteReg(ARDUCHIP_FIFO, FIFO_START_MASK);
 }
 /**
  * Deprecated
  */
-void start_capture() {
+void start_capture()
+{
   camClearFifoFlag();
   camStartCapture();
 }
