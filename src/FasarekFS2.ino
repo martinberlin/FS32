@@ -480,27 +480,42 @@ void serverCaptureWifi() {
     }
   }
  
-  // Skip response headers
+  
+  String response;
+  bool   skip_headers = true;
+  String rx_line;
+
   while(client.available()) {
-    if (client.readStringUntil('\r').length() <= 1) { 
-      break;
-    } 
+    rx_line = client.readStringUntil('\r');
+    if (rx_line.length() <= 1) { 
+        skip_headers = false;
+      }
+      // Collect http response
+     if (!skip_headers) {
+        response += rx_line;
+     }
+     delay(0);
   }
-  DynamicJsonBuffer jsonBuffer;
-  JsonObject& json = jsonBuffer.parseObject(client);
   client.stop();
   _md5.calculate();
   _md5.getChars(camHash);
+
+  Serial.println("response.length() = "+String(response.length()));
+  // DEBUG: Do some ugly parsing since a big JSON comes with garbage at the beginning like 398f {"jpg":1,2} 0 (And an appended zero?)
+  int jsonStart = response.indexOf('{');
+  int jsonEnd = response.indexOf('}');
+  response = response.substring(jsonStart, jsonEnd+1);
+  response.trim();
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& json = jsonBuffer.parseObject(response);
   total_time = millis() - total_time;
   cameraOff();
 
-  u8cursor = 75;
+  u8cursor = 87;
   if (!json.success()) {
     tft.setTextColor(TFT_RED);
     printMessage("JSON parse failed", true, true);
-    //json.printTo(response); // To print into a String
-    server.send(200, "text/html", "<div id='m'>JSON parse error. Debug output in json.printTo(Serial)</div><br>");
-    json.printTo(Serial);
+    server.send(200, "text/html", "<div id='m'>JSON parse error. Debug:<br>"+response+"</div><br>");
     return;
   }
   
@@ -846,7 +861,6 @@ void serverCameraParams() {
 
 // Button events
 void shutterReleased() {
-  Serial.println("shutterReleased()");
   if (spiffsFirst) {
     serverCaptureSpiffsWifi();
   } else {
@@ -878,8 +892,9 @@ void cameraInit() {
     myCAM.OV5642_set_JPEG_size(jpeg_size_id);
     // Set Exposure many times does not work and will make a corrupt and big JPG
     myCAM.OV5642_set_Exposure_level(cameraSetExposure);
+    myCAM.OV5642_set_Compress_quality(camJpegQuality);
     if (photoCounter == 0) delay(400);
-    delay(150);
+    delay(200);
     return;
   }
   digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
@@ -917,7 +932,8 @@ void serverStream() {
   cameraInit();
   printMessage("STREAMING", true, true);
   myCAM.OV5642_set_JPEG_size(0);
-
+  myCAM.OV5642_set_Compress_quality(2); // low
+  
   WiFiClient client = server.client();
   String response = "HTTP/1.1 200 OK\r\n";
   response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
