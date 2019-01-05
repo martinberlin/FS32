@@ -933,7 +933,7 @@ void serverStream() {
   printMessage("STREAMING", true, true);
   myCAM.OV5642_set_JPEG_size(0);
   myCAM.OV5642_set_Compress_quality(2); // low
-  
+  delay(500);
   WiFiClient client = server.client();
   String response = "HTTP/1.1 200 OK\r\n";
   response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
@@ -982,7 +982,7 @@ void serverStream() {
         image[ix++] = temp;
         //Write the remain bytes in the buffer
         myCAM.CS_HIGH();
-        client.write(&buffer[0], i);
+        client.write(buffer, i);
         drawArrayJpeg(image, ix, 0, 0); // Image too big (128x128 display)
         is_header = false;
         i = 0;
@@ -996,7 +996,7 @@ void serverStream() {
           } else {
           //Write bufferSize bytes image data to file
           myCAM.CS_HIGH();
-          client.write(&buffer[0], bufferSize);
+          client.write(buffer, bufferSize);
           i = 0;
           buffer[i++] = temp;
           image[ix++] = temp;
