@@ -42,7 +42,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
 byte  CS = 17;                                // set GPIO17 as the slave select for Camera SPI
-bool spiffsFirst = true;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
+bool spiffsFirst = false;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 
 // AP to Setup WiFi & Camera settings
@@ -212,6 +212,9 @@ void setup() {
   /* if (memory.resetWifiSettings) {
     wm.resetSettings();
   } */
+  //sets timeout until configuration portal gets turned off
+  //useful to make it all retry or go to sleep (in seconds)
+  wm.setTimeout(180);
   wm.setMenu(menu);
   // Add the defined parameters to wm
   wm.addParameter(&custom_html);
@@ -222,12 +225,12 @@ void setup() {
   wm.addParameter(&param_jpeg_size);
   wm.addParameter(&param_camera_mosfet);
   wm.setMinimumSignalQuality(20);
-  // Callbacks configuration
+    // Callbacks configuration
   wm.setSaveParamsCallback(saveParamCallback);
   wm.setBreakAfterConfig(true); // Without this saveConfigCallback does not get fired
   wm.setSaveConfigCallback(saveConfigCallback);
   wm.setAPCallback(configModeCallback);
-  wm.setDebugOutput(false);
+  wm.setDebugOutput(true);
   
   // If saveParamCallback is called then on next restart trigger config portal to update camera params
   if (memory.editSetup) {
@@ -236,11 +239,14 @@ void setup() {
     EEPROM_writeAnything(0, memory);
     wm.startConfigPortal(configModeAP);
   } else {
-    delay(1000);
-    wm.autoConnect(configModeAP);
+    if(!wm.autoConnect(configModeAP)) {
+      Serial.println("failed to connect and hit timeout");
+      //reset and try again, or maybe put it to deep sleep
+      ESP.restart();
+    } 
   }
   
-  Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
+  //Serial.println("xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   // Read updated parameters
   strcpy(timelapse, param_timelapse.getValue());
   strcpy(slave_cam_ip, param_slave_cam_ip.getValue());
@@ -363,7 +369,7 @@ void setup() {
   }
 
 String camCaptureWifi(ArduCAM myCAM) {
-  Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" camCapture() start");
+  //Serial.println("HEAP:"+String(xPortGetFreeHeapSize())+" camCapture() start");
   uint32_t len  = myCAM.read_fifo_length();
   uint32_t length = len;
   char pb1 [11];  // Sent Kb in progressBar
@@ -401,8 +407,7 @@ String camCaptureWifi(ArduCAM myCAM) {
       
       while (len) {
           size_t will_copy = (len < bufferSize) ? len : bufferSize;
-          // Sometimes this makes an exception: https://github.com/martinberlin/FS32/issues/5
-          SPI.transfer(buffer, will_copy);
+          SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
           // Check that FF & D8 came as JPEG headers (ArduCAM/Arduino/issues/381)
           if ((loops == 1) && (buffer[0] != 255) && (buffer[1] != 216)) {
             client.stop();
@@ -411,9 +416,9 @@ String camCaptureWifi(ArduCAM myCAM) {
             return "JPEG headers corrupt";
           }
           _md5.add(buffer, will_copy);
-          //We won't break the WiFi upload if client disconnects since this is also for SPIFFS upload
+          
           if (client.connected()) {
-            client.write(buffer, will_copy); //&buffer[0]
+            client.write(buffer, will_copy);
           }
           len -= will_copy;
           delay(0);
@@ -425,7 +430,7 @@ String camCaptureWifi(ArduCAM myCAM) {
             sprintf(progressBarMessage, "%s kb WiFi", pb1);
             progressBar(length-len, length, progressBarMessage);
           }
-        //copied = copied+will_copy;
+        
         loops++;
     }
     client.println(end_request);
@@ -469,8 +474,6 @@ String camCaptureWifi(ArduCAM myCAM) {
   response.trim();
   client.stop();
 
- 
-  Serial.println(response); Serial.println(camHash);
   return response;
 }
 
@@ -484,11 +487,11 @@ void serverCaptureWifi() {
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
     delay(0);
   }
-  /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
+  /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try: */
   if (onlineMode) {
     shutterPing();
   } 
-  */
+  
   String response = "";
   response = camCaptureWifi(myCAM);
   
@@ -545,7 +548,7 @@ void serverCaptureWifi() {
   if (strcmp(camHash, hash) == 0) {
       hashCheck = "<label style='color:green'>Image verified: "+String(camHash)+"</label>";
   } else {
-    printMessage("UP. CORRUPT"); // Repeat upload automatically
+    printMessage("UP. CORRUPT"); 
   }
   
   if (onlineMode) {
@@ -597,7 +600,8 @@ void serverCaptureSpiffsWifi() {
     fsFile = SPIFFS.open("/"+filename, "w");
     while (len) {
       size_t will_copy = (len < bufferSize) ? len : bufferSize;
-      SPI.transfer(buffer, will_copy);
+      //SPI.transfer(buffer, will_copy); //Only on feature/stage
+      SPI.transferBytes(&buffer[0], &buffer[0], will_copy);
       if (fsFile) {
         fsFile.write(&buffer[0], will_copy);
       }
@@ -917,8 +921,10 @@ void serverStopStream() {
 
 void serverStream() {
   cameraInit();
-  printMessage("STREAMING");
-  myCAM.OV5642_set_JPEG_size(1);
+  printMessage("STREAMING", true, true);
+  myCAM.OV5642_set_JPEG_size(0);
+  myCAM.OV5642_set_Compress_quality(2); // low
+  delay(500);
 
   WiFiClient client = server.client();
   String response = "HTTP/1.1 200 OK\r\n";
@@ -930,18 +936,14 @@ void serverStream() {
     // Use a handleClient only 1 every N times
     if (counter % 129 == 0) {
        server.handleClient();
-       Serial.print(String(counter)+" % NN Matched handleClient()");
     }
     start_capture();
     while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
-       // server.handleClient(); ?
        delay(0);
     }
     size_t len = myCAM.read_fifo_length();
 
-    if (len == 0 ) //0 kb
-    {
-      Serial.println(F("Size is 0."));
+    if (len == 0 ) {
       continue;
     }
     myCAM.CS_LOW();
@@ -961,7 +963,7 @@ void serverStream() {
         buffer[i++] = temp;  //save the last  0XD9
         //Write the remain bytes in the buffer
         myCAM.CS_HIGH();
-        client.write(&buffer[0], i);
+        client.write(buffer, i);
         is_header = false;
         i = 0;
       }
@@ -974,7 +976,7 @@ void serverStream() {
         {
           //Write bufferSize bytes image data to file
           myCAM.CS_HIGH();
-          client.write(&buffer[0], bufferSize);
+          client.write(buffer, bufferSize);
           i = 0;
           buffer[i++] = temp;
           myCAM.CS_LOW();
