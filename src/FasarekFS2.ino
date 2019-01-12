@@ -175,7 +175,7 @@ void setup() {
         configFile.readBytes(buf.get(), size);
         DynamicJsonBuffer jsonBuffer;
         JsonObject& json = jsonBuffer.parseObject(buf.get());
-        //json.printTo(Serial);
+        json.printTo(Serial);
         if (json.success()) {          
           strcpy(timelapse, json["timelapse"]);
           strcpy(upload_host, json["upload_host"]);
@@ -214,7 +214,7 @@ void setup() {
   } */
   //sets timeout until configuration portal gets turned off
   //useful to make it all retry or go to sleep (in seconds)
-  wm.setTimeout(180);
+  wm.setTimeout(300);
   wm.setMenu(menu);
   // Add the defined parameters to wm
   wm.addParameter(&custom_html);
@@ -274,7 +274,7 @@ void setup() {
     if (!configFile) {
       printMessage("ERR config file");
     }
-    json.printTo(Serial);
+    //json.printTo(Serial);
     json.printTo(configFile);
     configFile.close();
 
@@ -892,6 +892,7 @@ void cameraInit() {
     return;
   }
   digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
+  printMessage("Cam on delay "+String(waitMs)+"ms", true);
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
