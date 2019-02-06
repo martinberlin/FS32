@@ -41,7 +41,8 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, 
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
 const byte gpioCameraVcc = 5;                  // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 // NOTE: Don't use Heltec VEXT but an external MOSFET with gate connected to gpioCameraVcc (VEXT supports only 50mA while camera will take up to 200mA)
-byte  CS = 17;                                // set GPIO17 as the slave select for Camera SPI
+byte CS = 17;                                // set GPIO17 as the slave select for Camera SPI
+byte gpioShutterButton = 4;
 bool spiffsFirst = false;                      // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 
@@ -57,7 +58,7 @@ const char* localDomain  = "cam";              // mDNS: cam.local
 bool shouldSaveConfig = false;
 
 // Outputs / Inputs (Shutter button)
-OneButton buttonShutter(4, true, false);
+OneButton buttonShutter(gpioShutterButton, true, false);
 const int ledStatus = 12;
 
 // Makes a div id="m" containing response message to dissapear after 6 seconds
@@ -937,6 +938,10 @@ void serverStream() {
     // Use a handleClient only 1 every N times
     if (counter % 129 == 0) {
        server.handleClient();
+    }
+    // If shutter button is pressed get out of the loop
+    if (digitalRead(gpioShutterButton) == LOW) {
+       client.stop(); break;
     }
     start_capture();
     while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
