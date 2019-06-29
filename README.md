@@ -21,3 +21,6 @@ And that's all. It will be kept to this mini set of 5 Points. All the rest shoul
 1. An ESP32 board (Heltec, Wemos Lolin 32, any other)
 2. An OV5642 ArduCam
 3. A simple button that will connect a GPIO to GND
+
+## Companion projects 
+If you are interested in controlling addressable Leds with ESP32 and launching animations with short UDP commands check out our project [Remora](https://github.com/martinberlin/Remora)
