@@ -37,11 +37,10 @@ MD5Builder _md5;
 #include <JPEGDecoder.h>
 #include <TFT_eSPI.h>
 TFT_eSPI tft = TFT_eSPI();
-SPIClass * hspi = NULL;
+SPIClass * hspi;
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
-const uint8_t gpioCameraVcc = 5;              // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
 const uint8_t gpioButton    = 1;              // GPIO Shutter button (On press -> Ground)
 const uint8_t CS = 17;                        // set GPIO as the slave select for Camera SPI
 bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
@@ -132,7 +131,6 @@ void cameraInit() {
     delay(200);
     return;
   }
-  digitalWrite(gpioCameraVcc, LOW);    // Power camera ON
   myCAM.clear_bit(6, GPIO_PWDN_MASK);  // Disable low power
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
@@ -153,7 +151,7 @@ void cameraOff() {
     camSetBit(ARDUCHIP_GPIO,GPIO_PWDN_MASK);
     return;
   }
-  digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
+  //digitalWrite(gpioCameraVcc, HIGH); // Power camera OFF
 }
 
 void serverCaptureWifi() {
@@ -895,11 +893,14 @@ void defineServerRouting() {
     server.onNotFound(handleWebServerRoot);
     server.begin();
 }
+
+
 void setup() {
   Serial.begin(115200);
   Serial.println("setup() xPortGetFreeHeapSize "+String(xPortGetFreeHeapSize()));
   cameraSetExposure = 5; // Default exposure
   EEPROM.begin(12);
+  
   // myCAM.write_reg uses Wire for I2C communication
   Wire.begin();
 
@@ -919,9 +920,9 @@ void setup() {
 
   // Define outputs
   pinMode(CS, OUTPUT);
-  pinMode(gpioCameraVcc, OUTPUT);
+  //pinMode(gpioCameraVcc, OUTPUT);
   pinMode(ledStatus, OUTPUT);
-  digitalWrite(gpioCameraVcc, LOW); // Turn camera ON
+  //digitalWrite(gpioCameraVcc, LOW); // Turn camera ON
   // Read memory struct from EEPROM
   EEPROM_readAnything(0, memory);
 
