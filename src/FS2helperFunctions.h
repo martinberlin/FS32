@@ -230,11 +230,11 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
 
 void tftSleep()
 {
-  tft.writecommand(ST7735_SLPIN);
+  tft.writecommand(0x10); // ST7735_SLPIN
 }
 void tftWake()
 {
-  tft.writecommand(ST7735_SLPOUT);
+  tft.writecommand(0x11); // ST7735_SLPOUT
 }
 void tftClearScreen(bool resetCursor = false)
 {
