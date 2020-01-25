@@ -41,13 +41,13 @@ SPIClass * hspi = NULL;
 // CAMERA CONFIGURATION
 // camera_mosfet now moved to WM parameters please set it up on /data/config.json
 // cameraMosfetReady on true will make exposition control work rarely since does not leave enough wake up time to the camera
-const byte gpioCameraVcc = 5;                 // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
-const byte gpioButton    = 1;                // GPIO Shutter button (On press -> Ground)
-const byte  CS = 17;                          // set GPIO as the slave select for Camera SPI
+const uint8_t gpioCameraVcc = 5;              // GPIO on HIGH will turn camera on only in the moment of taking the picture (energy saving)
+const uint8_t gpioButton    = 1;              // GPIO Shutter button (On press -> Ground)
+const uint8_t CS = 17;                        // set GPIO as the slave select for Camera SPI
 bool spiffsFirst = false;                     // Whether to save the jpg first in SPIFFS (more secure, but takes longer)
 bool SpiffsDeleteAfterWifi = true;            // After WiFi upload, delete image in SPIFFS ?
 bool debugMode = false;
-byte photoCounter = 0;
+uint8_t photoCounter = 0;
 // AP to Setup WiFi & Camera settings
 const char* configModeAP = "CAM-autoconnect";  // Default config mode Access point
 const char* localDomain  = "cam";              // mDNS: cam.local
@@ -81,7 +81,7 @@ bool is_header = false;
 
 // Fixed to a OV5642
 ArduCAM myCAM(3, CS);
-byte camJpegQuality = 1; // 0 high . 1 default . 2 low
+uint8_t camJpegQuality = 1; // 0 high . 1 default . 2 low
 WiFiManager wm;
 WiFiClient client;
 WebServer server(80);
@@ -157,13 +157,14 @@ void cameraOff() {
 }
 
 void serverCaptureWifi() {
-  cameraInit();
+  cameraInit();delay(20);
   photoCounter++;
   printMessage("CAPTURING", true, true);
   start_capture();
   int total_time = millis();
   while (!camGetBit(ARDUCHIP_TRIG, CAP_DONE_MASK)) { // Trigger source
-    delay(10);
+    delay(300);
+    Serial.print("C ");
   }
   
   /* Commented here since no one seems to use it. If you need to use multiple chained cameras give it a try:
