@@ -2,6 +2,7 @@
 ## ESP32 WiFi powered digital Camera
 
 Finally in 2020 I found time to come back to this. It will be refactored in a single repository, so we will probably keep only the FS2 name. It's coming in the next weeks, since I need to prepare also a PlatformIO version so it will be possible to download it and compile it, without further ados.
+**IMPORTANT:** Due to another projects and also the fact that in the last years there are much more powerful cameras and with more resoulution than ArduCAMs this repository is **no longer mantained** and in read only mode (19 July 2020)
 
 ### The FS32 is a digital Polaroid that uploads the photo instantly to the cloud
 This project serves as a base to explore Arducam possibilities in combination with a WiFI ESP32 "System on a Chip" to create a simple WiFi point-and-shoot digital camera.
